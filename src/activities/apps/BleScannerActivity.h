@@ -27,6 +27,7 @@ class BleScannerActivity final : public Activity {
     std::string mac;
     int rssi;
     BLEAddress address{""};
+    esp_ble_addr_type_t addressType = BLE_ADDR_TYPE_PUBLIC;
   };
 
   State state = SCANNING_VIEW;

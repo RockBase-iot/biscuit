@@ -103,7 +103,8 @@ void BleScannerActivity::connectToDevice(int index) {
   stopBleScan();
 
   pClient = BLEDevice::createClient();
-  connected = pClient->connect(devices[index].address, 0xFF, 5000);  // 5 second timeout instead of default 30
+  connected = pClient->connect(devices[index].address, devices[index].addressType,
+                               5000);  // 5 second timeout instead of default 30
 
   if (connected) {
     enumerateServices();
@@ -458,6 +459,7 @@ void BleScannerActivity::loop() {
           newDev.mac = mac;
           newDev.rssi = dev.getRSSI();
           newDev.address = dev.getAddress();
+          newDev.addressType = dev.getAddressType();
           devices.push_back(std::move(newDev));
         }
       }
