@@ -12,6 +12,29 @@ HalDisplay display;
 
 #if BOARD_NM_EPD_420
 
+namespace {
+template <typename Display>
+void initActiveDisplay(Display& epd, bool fastFullUpdate) {
+  epd.init(115200, true, 2, false);
+  epd.epd2.selectFastFullUpdate(fastFullUpdate);
+  epd.setRotation(0);
+}
+
+template <typename Display>
+void flushBitmapToDisplay(Display& epd, const uint8_t* txBuffer, bool turnOffScreen) {
+  epd.setFullWindow();
+  epd.firstPage();
+  do {
+    epd.fillScreen(GxEPD_WHITE);
+    epd.drawBitmap(0, 0, txBuffer, HalDisplay::DISPLAY_WIDTH, HalDisplay::DISPLAY_HEIGHT, GxEPD_BLACK);
+  } while (epd.nextPage());
+
+  if (turnOffScreen) {
+    epd.hibernate();
+  }
+}
+}  // namespace
+
 HalDisplay::HalDisplay() { memset(frameBuffer, 0xFF, sizeof(frameBuffer)); }
 
 HalDisplay::~HalDisplay() {}
@@ -19,15 +42,16 @@ HalDisplay::~HalDisplay() {}
 void HalDisplay::begin() {
   SPI.begin(NM_EPD_SCK, NM_EPD_MISO, NM_EPD_MOSI, NM_EPD_CS);
   selectPanelDriver();
-  rawDisplay().init(115200, true, 2, false);
-  rawDisplay().epd2.selectFastFullUpdate(!activeIsUc8179);
-  rawDisplay().setRotation(0);
+  if (activeIsUc8179) {
+    initActiveDisplay(uc8179, false);
+  } else {
+    initActiveDisplay(ssd1683, true);
+  }
   clearScreen();
 }
 
 void HalDisplay::selectPanelDriver() {
   activeIsUc8179 = detectUc8179Panel();
-  activeDisplay = activeIsUc8179 ? static_cast<EpdDisplay*>(&uc8179) : static_cast<EpdDisplay*>(&ssd1683);
 }
 
 bool HalDisplay::detectUc8179Panel() {
@@ -101,22 +125,22 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
     txBuffer[i] = static_cast<uint8_t>(~frameBuffer[i]);
   }
 
-  auto& epd = rawDisplay();
-  epd.setFullWindow();
-  epd.firstPage();
-  do {
-    epd.fillScreen(GxEPD_WHITE);
-    epd.drawBitmap(0, 0, txBuffer, DISPLAY_WIDTH, DISPLAY_HEIGHT, GxEPD_BLACK);
-  } while (epd.nextPage());
-
-  if (turnOffScreen) {
-    epd.hibernate();
+  if (activeIsUc8179) {
+    flushBitmapToDisplay(uc8179, txBuffer, turnOffScreen);
+  } else {
+    flushBitmapToDisplay(ssd1683, txBuffer, turnOffScreen);
   }
 }
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) { displayBuffer(mode, turnOffScreen); }
 
-void HalDisplay::deepSleep() { rawDisplay().hibernate(); }
+void HalDisplay::deepSleep() {
+  if (activeIsUc8179) {
+    uc8179.hibernate();
+  } else {
+    ssd1683.hibernate();
+  }
+}
 
 uint8_t* HalDisplay::getFrameBuffer() const { return frameBuffer; }
 

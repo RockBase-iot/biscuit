@@ -3,6 +3,10 @@
 #include <Preferences.h>
 #include <SPI.h>
 #include <Wire.h>
+#if BOARD_NM_EPD_420
+#include <driver/gpio.h>
+#include <driver/rtc_io.h>
+#endif
 #include <esp_sleep.h>
 
 // Global HalGPIO instance
@@ -115,6 +119,76 @@ X3ProbeResult runX3ProbePass() {
 }  // namespace X3GPIO
 
 namespace {
+#if BOARD_NM_EPD_420
+constexpr uint8_t kNmHoldPins[] = {NM_PA_CTRL,  NM_LORA_EN,  NM_LORA_NSS,  NM_LORA_SCK, NM_LORA_MOSI,
+                                   NM_LORA_MISO, NM_LORA_RST, NM_LORA_BUSY, NM_LORA_DIO1, NM_SD_CS,
+                                   NM_EPD_RST,  NM_TEMP_SDA,  NM_TEMP_SCL,  NM_CODEC_EN, NM_ADC_EN,
+                                   NM_TEMP_CTL};
+
+constexpr uint8_t kNmHiZSleepPins[] = {
+    NM_LORA_NSS, NM_LORA_SCK, NM_LORA_RST, NM_LORA_BUSY, NM_LORA_DIO1, NM_LORA_MISO, NM_LORA_MOSI,
+    NM_EPD_BUSY, NM_EPD_CS,   NM_EPD_DC,   NM_EPD_SCK,   NM_EPD_MOSI,  NM_EPD_RST,  NM_TEMP_SCL,
+    NM_TEMP_SDA, NM_SD_CS,    NM_I2S_SCLK, NM_I2S_ASDOUT, NM_I2S_LRCK, NM_I2S_DSIN, NM_I2S_MCLK,
+    NM_BATT_ADC, NM_USER_BTN};
+
+void releaseNmGpioHolds() {
+  gpio_deep_sleep_hold_dis();
+  for (const uint8_t pin : kNmHoldPins) {
+    gpio_hold_dis(static_cast<gpio_num_t>(pin));
+  }
+  rtc_gpio_hold_dis(static_cast<gpio_num_t>(NM_LORA_MOSI));
+  rtc_gpio_hold_dis(static_cast<gpio_num_t>(NM_LORA_MISO));
+  rtc_gpio_deinit(static_cast<gpio_num_t>(NM_LORA_MOSI));
+  rtc_gpio_deinit(static_cast<gpio_num_t>(NM_LORA_MISO));
+}
+
+void configureNmPeripheralIdlePins() {
+  pinMode(NM_LORA_EN, OUTPUT);
+  digitalWrite(NM_LORA_EN, LOW);
+  pinMode(NM_CODEC_EN, OUTPUT);
+  digitalWrite(NM_CODEC_EN, LOW);
+  pinMode(NM_ADC_EN, OUTPUT);
+  digitalWrite(NM_ADC_EN, LOW);
+  pinMode(NM_TEMP_CTL, OUTPUT);
+  digitalWrite(NM_TEMP_CTL, LOW);
+  pinMode(NM_PA_CTRL, OUTPUT);
+  digitalWrite(NM_PA_CTRL, HIGH);
+
+  pinMode(NM_LORA_NSS, INPUT);
+  pinMode(NM_LORA_SCK, INPUT);
+  pinMode(NM_LORA_MOSI, INPUT);
+  pinMode(NM_LORA_MISO, INPUT);
+  pinMode(NM_LORA_RST, INPUT);
+  pinMode(NM_LORA_BUSY, INPUT);
+  pinMode(NM_LORA_DIO1, INPUT);
+}
+
+void configureNmPeripheralSleepPins() {
+  pinMode(NM_LORA_EN, OUTPUT);
+  digitalWrite(NM_LORA_EN, LOW);
+  pinMode(NM_CODEC_EN, OUTPUT);
+  digitalWrite(NM_CODEC_EN, LOW);
+  pinMode(NM_ADC_EN, OUTPUT);
+  digitalWrite(NM_ADC_EN, LOW);
+  pinMode(NM_TEMP_CTL, OUTPUT);
+  digitalWrite(NM_TEMP_CTL, LOW);
+  pinMode(NM_PA_CTRL, OUTPUT);
+  digitalWrite(NM_PA_CTRL, LOW);
+  delay(10);
+
+  for (const uint8_t pin : kNmHiZSleepPins) {
+    pinMode(pin, INPUT);
+  }
+
+  gpio_hold_en(static_cast<gpio_num_t>(NM_LORA_EN));
+  gpio_hold_en(static_cast<gpio_num_t>(NM_CODEC_EN));
+  gpio_hold_en(static_cast<gpio_num_t>(NM_ADC_EN));
+  gpio_hold_en(static_cast<gpio_num_t>(NM_TEMP_CTL));
+  gpio_hold_en(static_cast<gpio_num_t>(NM_PA_CTRL));
+  gpio_deep_sleep_hold_en();
+}
+#endif
+
 constexpr char HW_NAMESPACE[] = "cphw";
 constexpr char NVS_KEY_DEV_OVERRIDE[] = "dev_ovr";  // 0=auto, 1=x4, 2=x3
 constexpr char NVS_KEY_DEV_CACHED[] = "dev_det";    // 0=unknown, 1=x4, 2=x3
@@ -193,6 +267,8 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
 void HalGPIO::begin() {
 #if BOARD_NM_EPD_420
   _deviceType = DeviceType::NmEpd420;
+  releaseNmGpioHolds();
+  configureNmPeripheralIdlePins();
   pinMode(NM_USER_BTN, INPUT_PULLUP);
   pinMode(NM_BOOT_BTN, INPUT_PULLUP);
   pinMode(NM_EPD_CS, OUTPUT);
@@ -306,11 +382,13 @@ unsigned long HalGPIO::getHeldTime() const {
 
 void HalGPIO::startDeepSleep() {
 #if BOARD_NM_EPD_420
-  while (isPressed(BTN_POWER)) {
+  while (digitalRead(NM_USER_BTN) == LOW || digitalRead(NM_BOOT_BTN) == LOW) {
     delay(50);
     update();
   }
-  esp_deep_sleep_enable_gpio_wakeup((1ULL << NM_USER_BTN) | (1ULL << NM_BOOT_BTN), ESP_GPIO_WAKEUP_GPIO_LOW);
+  configureNmPeripheralSleepPins();
+  Serial.flush();
+  esp_sleep_enable_ext1_wakeup((1ULL << NM_USER_BTN) | (1ULL << NM_BOOT_BTN), ESP_EXT1_WAKEUP_ANY_LOW);
   esp_deep_sleep_start();
 #else
   // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
@@ -385,7 +463,7 @@ bool HalGPIO::isUsbConnected() const {
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
 #if BOARD_NM_EPD_420
-  return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO ? WakeupReason::PowerButton : WakeupReason::Other;
+  return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1 ? WakeupReason::PowerButton : WakeupReason::Other;
 #else
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();

@@ -5,10 +5,12 @@
 #include "Arduino.h"
 #include "HalStorage.h"
 #include "Logging.h"
+#if !BOARD_NM_EPD_420
 #include "esp_debug_helpers.h"
 #include "esp_private/esp_cpu_internal.h"
 #include "esp_private/esp_system_attr.h"
 #include "esp_private/panic_internal.h"
+#endif
 
 #define MAX_PANIC_STACK_DEPTH 32
 

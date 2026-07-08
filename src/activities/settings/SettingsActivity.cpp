@@ -20,6 +20,14 @@
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
 
+namespace {
+#if BOARD_NM_EPD_420
+bool isHiddenOnNmEpd420(const SettingInfo& setting) {
+  return setting.nameId == StrId::STR_SIDE_BTN_LAYOUT || setting.nameId == StrId::STR_SHORT_PWR_BTN;
+}
+#endif
+}  // namespace
+
 void SettingsActivity::onEnter() {
   Activity::onEnter();
 
@@ -31,6 +39,9 @@ void SettingsActivity::onEnter() {
 
   for (const auto& setting : getSettingsList()) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
+#if BOARD_NM_EPD_420
+    if (isHiddenOnNmEpd420(setting)) continue;
+#endif
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
@@ -44,8 +55,10 @@ void SettingsActivity::onEnter() {
   }
 
   // Append device-only ACTION items
+#if !BOARD_NM_EPD_420
   controlsSettings.insert(controlsSettings.begin(),
                           SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+#endif
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_BROWSER, SettingAction::OPDSBrowser));

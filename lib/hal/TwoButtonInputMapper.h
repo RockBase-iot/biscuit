@@ -141,7 +141,6 @@ class TwoButtonInputMapper {
     emitClick(Button::Back);
     emitClick(Button::Up);
     emitClick(Button::Left);
-    emitClick(Button::PageBack);
   }
 
   void emitBootRelease(uint32_t nowMs) {
@@ -154,6 +153,5 @@ class TwoButtonInputMapper {
     emitClick(Button::Confirm);
     emitClick(Button::Down);
     emitClick(Button::Right);
-    emitClick(Button::PageForward);
   }
 };

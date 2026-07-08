@@ -74,10 +74,9 @@ class HalDisplay {
 
  private:
 #if BOARD_NM_EPD_420
-  static constexpr uint16_t EPD_PAGE_HEIGHT = DISPLAY_HEIGHT;
+  static constexpr uint16_t EPD_PAGE_HEIGHT = DISPLAY_HEIGHT / 2;
   using Ssd1683Display = GxEPD2_3C<GxEPD2_420c_GDEY042Z98, EPD_PAGE_HEIGHT>;
   using Uc8179Display = GxEPD2_3C<GxEPD2_420c_NM_UC8179, EPD_PAGE_HEIGHT>;
-  using EpdDisplay = GxEPD2_GFX;
 
   mutable uint8_t frameBuffer[BUFFER_SIZE];
   mutable uint8_t txBuffer[BUFFER_SIZE];
@@ -85,12 +84,10 @@ class HalDisplay {
   GxEPD2_420c_NM_UC8179 uc8179Driver{NM_EPD_CS, NM_EPD_DC, NM_EPD_RST, NM_EPD_BUSY};
   Ssd1683Display ssd1683{ssd1683Driver};
   Uc8179Display uc8179{uc8179Driver};
-  EpdDisplay* activeDisplay = &ssd1683;
   bool activeIsUc8179 = false;
 
   void selectPanelDriver();
   bool detectUc8179Panel();
-  EpdDisplay& rawDisplay() const { return *activeDisplay; }
   void writeBitmapToFramebuffer(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                                 bool transparent, bool fromProgmem) const;
 #else

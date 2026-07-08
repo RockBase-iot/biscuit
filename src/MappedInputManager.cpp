@@ -18,6 +18,27 @@ constexpr SideLayoutMap kSideLayouts[] = {
 }  // namespace
 
 bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
+#if BOARD_NM_EPD_420
+  switch (button) {
+    case Button::Back:
+      return (gpio.*fn)(HalGPIO::BTN_BACK);
+    case Button::Confirm:
+      return (gpio.*fn)(HalGPIO::BTN_CONFIRM);
+    case Button::Left:
+      return (gpio.*fn)(HalGPIO::BTN_LEFT);
+    case Button::Right:
+      return (gpio.*fn)(HalGPIO::BTN_RIGHT);
+    case Button::Up:
+    case Button::PageBack:
+      return (gpio.*fn)(HalGPIO::BTN_UP);
+    case Button::Down:
+    case Button::PageForward:
+      return (gpio.*fn)(HalGPIO::BTN_DOWN);
+    case Button::Power:
+      return (gpio.*fn)(HalGPIO::BTN_POWER);
+  }
+  return false;
+#else
   const auto sideLayout = static_cast<CrossPointSettings::SIDE_BUTTON_LAYOUT>(SETTINGS.sideButtonLayout);
   const auto& side = kSideLayouts[sideLayout];
 
@@ -52,6 +73,7 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   }
 
   return false;
+#endif
 }
 
 bool MappedInputManager::wasPressed(const Button button) const { return mapButton(button, &HalGPIO::wasPressed); }
