@@ -1,7 +1,12 @@
 #pragma once
 
 #include <Arduino.h>
+#if BOARD_NM_EPD_420
+#include "NmEpd420Pins.h"
+#include "TwoButtonInputMapper.h"
+#else
 #include <InputManager.h>
+#endif
 
 // Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
 #define EPD_SCLK 8   // SPI Clock
@@ -39,7 +44,10 @@
 #define QMI8658_WHO_AM_I_VALUE 0x05  // WHO_AM_I expected value
 
 class HalGPIO {
-#if CROSSPOINT_EMULATED == 0
+#if BOARD_NM_EPD_420
+  TwoButtonInputMapper twoButtonInput;
+  unsigned long lastInputUpdateMs = 0;
+#elif CROSSPOINT_EMULATED == 0
   InputManager inputMgr;
 #endif
 
@@ -47,10 +55,15 @@ class HalGPIO {
   bool usbStateChanged = false;
 
  public:
-  enum class DeviceType : uint8_t { X4, X3 };
+  enum class DeviceType : uint8_t { X4, X3, NmEpd420 };
 
  private:
-  DeviceType _deviceType = DeviceType::X4;
+  DeviceType _deviceType =
+#if BOARD_NM_EPD_420
+      DeviceType::NmEpd420;
+#else
+      DeviceType::X4;
+#endif
 
  public:
   HalGPIO() = default;
@@ -58,6 +71,7 @@ class HalGPIO {
   // Inline device type helpers for cleaner downstream checks
   inline bool deviceIsX3() const { return _deviceType == DeviceType::X3; }
   inline bool deviceIsX4() const { return _deviceType == DeviceType::X4; }
+  inline bool deviceIsNmEpd420() const { return _deviceType == DeviceType::NmEpd420; }
 
   // Start button GPIO and setup SPI for screen and SD card
   void begin();

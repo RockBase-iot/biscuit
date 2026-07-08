@@ -191,6 +191,17 @@ HalGPIO::DeviceType detectDeviceTypeWithFingerprint() {
 }  // namespace
 
 void HalGPIO::begin() {
+#if BOARD_NM_EPD_420
+  _deviceType = DeviceType::NmEpd420;
+  pinMode(NM_USER_BTN, INPUT_PULLUP);
+  pinMode(NM_BOOT_BTN, INPUT_PULLUP);
+  pinMode(NM_EPD_CS, OUTPUT);
+  digitalWrite(NM_EPD_CS, HIGH);
+  pinMode(NM_SD_CS, OUTPUT);
+  digitalWrite(NM_SD_CS, HIGH);
+  lastInputUpdateMs = millis();
+  update();
+#else
   inputMgr.begin();
   SPI.begin(EPD_SCLK, SPI_MISO, EPD_MOSI, EPD_CS);
 
@@ -200,30 +211,108 @@ void HalGPIO::begin() {
     pinMode(BAT_GPIO0, INPUT);
     pinMode(UART0_RXD, INPUT);
   }
+#endif
 }
 
 void HalGPIO::update() {
+#if BOARD_NM_EPD_420
+  lastInputUpdateMs = millis();
+  const bool userPressed = digitalRead(NM_USER_BTN) == LOW;
+  const bool bootPressed = digitalRead(NM_BOOT_BTN) == LOW;
+  twoButtonInput.update(userPressed, bootPressed, lastInputUpdateMs);
+  usbStateChanged = false;
+#else
   inputMgr.update();
   const bool connected = isUsbConnected();
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
+#endif
 }
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
-bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
+namespace {
+#if BOARD_NM_EPD_420
+TwoButtonInputMapper::Button toTwoButton(uint8_t buttonIndex) {
+  using Button = TwoButtonInputMapper::Button;
+  switch (buttonIndex) {
+    case HalGPIO::BTN_BACK:
+      return Button::Back;
+    case HalGPIO::BTN_CONFIRM:
+      return Button::Confirm;
+    case HalGPIO::BTN_LEFT:
+      return Button::Left;
+    case HalGPIO::BTN_RIGHT:
+      return Button::Right;
+    case HalGPIO::BTN_UP:
+      return Button::Up;
+    case HalGPIO::BTN_DOWN:
+      return Button::Down;
+    case HalGPIO::BTN_POWER:
+    default:
+      return Button::Power;
+  }
+}
+#endif
+}  // namespace
 
-bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
+bool HalGPIO::isPressed(uint8_t buttonIndex) const {
+#if BOARD_NM_EPD_420
+  return twoButtonInput.isPressed(toTwoButton(buttonIndex));
+#else
+  return inputMgr.isPressed(buttonIndex);
+#endif
+}
 
-bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed(); }
+bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
+#if BOARD_NM_EPD_420
+  return twoButtonInput.wasPressed(toTwoButton(buttonIndex));
+#else
+  return inputMgr.wasPressed(buttonIndex);
+#endif
+}
 
-bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return inputMgr.wasReleased(buttonIndex); }
+bool HalGPIO::wasAnyPressed() const {
+#if BOARD_NM_EPD_420
+  return twoButtonInput.wasAnyPressed();
+#else
+  return inputMgr.wasAnyPressed();
+#endif
+}
 
-bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
+bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
+#if BOARD_NM_EPD_420
+  return twoButtonInput.wasReleased(toTwoButton(buttonIndex));
+#else
+  return inputMgr.wasReleased(buttonIndex);
+#endif
+}
 
-unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
+bool HalGPIO::wasAnyReleased() const {
+#if BOARD_NM_EPD_420
+  return twoButtonInput.wasAnyReleased();
+#else
+  return inputMgr.wasAnyReleased();
+#endif
+}
+
+unsigned long HalGPIO::getHeldTime() const {
+#if BOARD_NM_EPD_420
+  return twoButtonInput.heldTime(lastInputUpdateMs);
+#else
+  return inputMgr.getHeldTime();
+#endif
+}
 
 void HalGPIO::startDeepSleep() {
+#if BOARD_NM_EPD_420
+  while (isPressed(BTN_POWER)) {
+    delay(50);
+    update();
+  }
+  esp_deep_sleep_enable_gpio_wakeup((1ULL << NM_USER_BTN) | (1ULL << NM_BOOT_BTN), ESP_GPIO_WAKEUP_GPIO_LOW);
+  esp_deep_sleep_start();
+#else
   // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
   while (inputMgr.isPressed(BTN_POWER)) {
     delay(50);
@@ -233,9 +322,14 @@ void HalGPIO::startDeepSleep() {
   esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
   // Enter Deep Sleep
   esp_deep_sleep_start();
+#endif
 }
 
 void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed) {
+#if BOARD_NM_EPD_420
+  (void)requiredDurationMs;
+  (void)shortPressAllowed;
+#else
   if (shortPressAllowed) {
     // Fast path - no duration check needed
     return;
@@ -265,9 +359,13 @@ void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPre
   } else {
     startDeepSleep();
   }
+#endif
 }
 
 bool HalGPIO::isUsbConnected() const {
+#if BOARD_NM_EPD_420
+  return true;
+#else
   if (deviceIsX3()) {
     // X3: infer USB/charging via BQ27220 Current() register (0x0C, signed mA).
     // Positive current means charging.
@@ -282,9 +380,13 @@ bool HalGPIO::isUsbConnected() const {
   }
   // U0RXD/GPIO20 reads HIGH when USB is connected
   return digitalRead(UART0_RXD) == HIGH;
+#endif
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
+#if BOARD_NM_EPD_420
+  return esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_GPIO ? WakeupReason::PowerButton : WakeupReason::Other;
+#else
   const auto wakeupCause = esp_sleep_get_wakeup_cause();
   const auto resetReason = esp_reset_reason();
 
@@ -301,4 +403,5 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
     return WakeupReason::AfterUSBPower;
   }
   return WakeupReason::Other;
+#endif
 }

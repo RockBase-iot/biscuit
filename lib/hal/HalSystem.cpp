@@ -34,6 +34,9 @@ void IRAM_ATTR __wrap_panic_abort(const char* message) {
 }
 
 void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
+#if BOARD_NM_EPD_420
+  __real_panic_print_backtrace(frame, core);
+#else
   if (!frame) {
     __real_panic_print_backtrace(frame, core);
     return;
@@ -65,6 +68,7 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
   }
 
   __real_panic_print_backtrace(frame, core);
+#endif
 }
 }
 

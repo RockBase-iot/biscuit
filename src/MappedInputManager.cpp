@@ -68,6 +68,9 @@ unsigned long MappedInputManager::getHeldTime() const { return gpio.getHeldTime(
 
 MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const char* confirm, const char* previous,
                                                          const char* next) const {
+#if BOARD_NM_EPD_420
+  return {previous, next, back, confirm};
+#else
   // Build the label order based on the configured hardware mapping.
   auto labelForHardware = [&](uint8_t hw) -> const char* {
     // Compare against configured logical roles and return the matching label.
@@ -88,6 +91,7 @@ MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const
 
   return {labelForHardware(HalGPIO::BTN_BACK), labelForHardware(HalGPIO::BTN_CONFIRM),
           labelForHardware(HalGPIO::BTN_LEFT), labelForHardware(HalGPIO::BTN_RIGHT)};
+#endif
 }
 
 int MappedInputManager::getPressedFrontButton() const {

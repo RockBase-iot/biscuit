@@ -241,7 +241,8 @@ void setup() {
   }
 #endif
 
-  LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
+  LOG_INF("MAIN", "Hardware detect: %s",
+          gpio.deviceIsNmEpd420() ? "NM-EPD-420" : (gpio.deviceIsX3() ? "X3" : "X4"));
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter

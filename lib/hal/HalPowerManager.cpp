@@ -7,10 +7,19 @@
 #include <cassert>
 
 #include "HalGPIO.h"
+#if BOARD_NM_EPD_420
+#include "NmEpd420Pins.h"
+#endif
 
 HalPowerManager powerManager;  // Singleton instance
 
 void HalPowerManager::begin() {
+#if BOARD_NM_EPD_420
+  pinMode(NM_ADC_EN, OUTPUT);
+  digitalWrite(NM_ADC_EN, LOW);
+  pinMode(NM_BATT_ADC, INPUT);
+  _batteryUseI2C = false;
+#else
   if (gpio.deviceIsX3()) {
     // X3 uses an I2C fuel gauge for battery monitoring.
     // I2C init must come AFTER gpio.begin() so early hardware detection/probes are finished.
@@ -20,6 +29,7 @@ void HalPowerManager::begin() {
   } else {
     pinMode(BAT_GPIO0, INPUT);
   }
+#endif
   normalFreq = getCpuFrequencyMhz();
   modeMutex = xSemaphoreCreateMutex();
   assert(modeMutex != nullptr);
@@ -61,6 +71,9 @@ void HalPowerManager::setPowerSaving(bool enabled) {
 }
 
 void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
+#if BOARD_NM_EPD_420
+  gpio.startDeepSleep();
+#else
   // Ensure that the power button has been released to avoid immediately turning back on if you're holding it
   while (gpio.isPressed(HalGPIO::BTN_POWER)) {
     delay(50);
@@ -83,9 +96,27 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   esp_deep_sleep_enable_gpio_wakeup(1ULL << InputManager::POWER_BUTTON_PIN, ESP_GPIO_WAKEUP_GPIO_LOW);
   // Enter Deep Sleep
   esp_deep_sleep_start();
+#endif
 }
 
 uint16_t HalPowerManager::getBatteryPercentage() const {
+#if BOARD_NM_EPD_420
+  digitalWrite(NM_ADC_EN, HIGH);
+  delay(NM_BATT_ADC_SETTLE_MS);
+
+  uint32_t totalMv = 0;
+  for (uint8_t i = 0; i < NM_BATT_ADC_SAMPLES; ++i) {
+    totalMv += analogReadMilliVolts(NM_BATT_ADC);
+    delay(2);
+  }
+  digitalWrite(NM_ADC_EN, LOW);
+
+  const uint32_t adcMv = totalMv / NM_BATT_ADC_SAMPLES;
+  const uint32_t batteryMv = adcMv * NM_BATT_ADC_DIV;
+  if (batteryMv <= NM_BATT_MIN_MV) return 0;
+  if (batteryMv >= NM_BATT_MAX_MV) return 100;
+  return static_cast<uint16_t>(((batteryMv - NM_BATT_MIN_MV) * 100UL) / (NM_BATT_MAX_MV - NM_BATT_MIN_MV));
+#else
   if (_batteryUseI2C) {
     const unsigned long now = millis();
     if (_batteryLastPollMs != 0 && (now - _batteryLastPollMs) < BATTERY_POLL_MS) {
@@ -115,6 +146,7 @@ uint16_t HalPowerManager::getBatteryPercentage() const {
   static const BatteryMonitor battery = BatteryMonitor(BAT_GPIO0);
   _batteryCachedPercent = battery.readPercentage();
   return _batteryCachedPercent;
+#endif
 }
 
 HalPowerManager::Lock::Lock() {

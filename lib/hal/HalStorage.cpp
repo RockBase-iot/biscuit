@@ -3,13 +3,38 @@
 
 #include <FS.h>  // need to be included before SdFat.h for compatibility with FS.h's File class
 #include <Logging.h>
-#include <SDCardManager.h>
+#if BOARD_NM_EPD_420
+#include <SPI.h>
+#include <SdFat.h>
 
+#include "NmEpd420Pins.h"
+#else
+#include <SDCardManager.h>
+#endif
+
+#include <algorithm>
 #include <cassert>
 
+#if !BOARD_NM_EPD_420
 #define SDCard SDCardManager::getInstance()
+#endif
 
 HalStorage HalStorage::instance;
+
+#if BOARD_NM_EPD_420
+namespace {
+SPIClass nmSdSpi(HSPI);
+SdFs nmSd;
+
+String readAll(FsFile& file) {
+  String content;
+  while (file.available()) {
+    content += static_cast<char>(file.read());
+  }
+  return content;
+}
+}  // namespace
+#endif
 
 HalStorage::HalStorage() {
   storageMutex = xSemaphoreCreateMutex();
@@ -18,9 +43,25 @@ HalStorage::HalStorage() {
 
 // begin() and ready() are only called from setup, no need to acquire mutex for them
 
-bool HalStorage::begin() { return SDCard.begin(); }
+bool HalStorage::begin() {
+#if BOARD_NM_EPD_420
+  pinMode(NM_SD_CS, OUTPUT);
+  digitalWrite(NM_SD_CS, HIGH);
+  nmSdSpi.begin(NM_SD_SCK, NM_SD_MISO, NM_SD_MOSI, NM_SD_CS);
+  initialized = nmSd.begin(SdSpiConfig(NM_SD_CS, DEDICATED_SPI, SD_SCK_MHZ(20), &nmSdSpi));
+  return initialized;
+#else
+  return SDCard.begin();
+#endif
+}
 
-bool HalStorage::ready() const { return SDCard.ready(); }
+bool HalStorage::ready() const {
+#if BOARD_NM_EPD_420
+  return initialized;
+#else
+  return SDCard.ready();
+#endif
+}
 
 // For the rest of the methods, we acquire the mutex to ensure thread safety
 
@@ -35,24 +76,116 @@ class HalStorage::StorageLock {
   return SDCard.method(__VA_ARGS__);
 
 std::vector<String> HalStorage::listFiles(const char* path, int maxFiles) {
+#if BOARD_NM_EPD_420
+  StorageLock lock;
+  std::vector<String> files;
+  FsFile dir = nmSd.open(path);
+  if (!dir || !dir.isDirectory()) {
+    return files;
+  }
+
+  FsFile file;
+  while (files.size() < static_cast<size_t>(maxFiles) && file.openNext(&dir, O_RDONLY)) {
+    char name[128] = {};
+    file.getName(name, sizeof(name));
+    files.emplace_back(name);
+    file.close();
+  }
+  dir.close();
+  return files;
+#else
   HAL_STORAGE_WRAPPED_CALL(listFiles, path, maxFiles);
+#endif
 }
 
-String HalStorage::readFile(const char* path) { HAL_STORAGE_WRAPPED_CALL(readFile, path); }
+String HalStorage::readFile(const char* path) {
+#if BOARD_NM_EPD_420
+  StorageLock lock;
+  FsFile file = nmSd.open(path, O_RDONLY);
+  if (!file) {
+    return "";
+  }
+  String content = readAll(file);
+  file.close();
+  return content;
+#else
+  HAL_STORAGE_WRAPPED_CALL(readFile, path);
+#endif
+}
 
 bool HalStorage::readFileToStream(const char* path, Print& out, size_t chunkSize) {
+#if BOARD_NM_EPD_420
+  StorageLock lock;
+  FsFile file = nmSd.open(path, O_RDONLY);
+  if (!file) {
+    return false;
+  }
+  auto* buffer = static_cast<uint8_t*>(malloc(chunkSize));
+  if (!buffer) {
+    file.close();
+    return false;
+  }
+  while (file.available()) {
+    const int n = file.read(buffer, chunkSize);
+    if (n <= 0 || out.write(buffer, static_cast<size_t>(n)) != static_cast<size_t>(n)) {
+      free(buffer);
+      file.close();
+      return false;
+    }
+  }
+  free(buffer);
+  file.close();
+  return true;
+#else
   HAL_STORAGE_WRAPPED_CALL(readFileToStream, path, out, chunkSize);
+#endif
 }
 
 size_t HalStorage::readFileToBuffer(const char* path, char* buffer, size_t bufferSize, size_t maxBytes) {
+#if BOARD_NM_EPD_420
+  StorageLock lock;
+  if (!buffer || bufferSize == 0) {
+    return 0;
+  }
+  FsFile file = nmSd.open(path, O_RDONLY);
+  if (!file) {
+    buffer[0] = '\0';
+    return 0;
+  }
+  const size_t limit = maxBytes > 0 ? std::min(bufferSize - 1, maxBytes) : bufferSize - 1;
+  const int bytesRead = file.read(buffer, limit);
+  file.close();
+  const size_t n = bytesRead > 0 ? static_cast<size_t>(bytesRead) : 0;
+  buffer[n] = '\0';
+  return n;
+#else
   HAL_STORAGE_WRAPPED_CALL(readFileToBuffer, path, buffer, bufferSize, maxBytes);
+#endif
 }
 
 bool HalStorage::writeFile(const char* path, const String& content) {
+#if BOARD_NM_EPD_420
+  StorageLock lock;
+  FsFile file = nmSd.open(path, O_WRONLY | O_CREAT | O_TRUNC);
+  if (!file) {
+    return false;
+  }
+  const bool ok = file.write(reinterpret_cast<const uint8_t*>(content.c_str()), content.length()) == content.length();
+  file.close();
+  return ok;
+#else
   HAL_STORAGE_WRAPPED_CALL(writeFile, path, content);
+#endif
 }
 
-bool HalStorage::ensureDirectoryExists(const char* path) { HAL_STORAGE_WRAPPED_CALL(ensureDirectoryExists, path); }
+bool HalStorage::ensureDirectoryExists(const char* path) {
+#if BOARD_NM_EPD_420
+  StorageLock lock;
+  return nmSd.exists(path) || nmSd.mkdir(path);
+#else
+  HAL_STORAGE_WRAPPED_CALL(ensureDirectoryExists, path);
+#endif
+}
 
 class HalFile::Impl {
  public:
@@ -72,24 +205,67 @@ HalFile& HalFile::operator=(HalFile&&) = default;
 
 HalFile HalStorage::open(const char* path, const oflag_t oflag) {
   StorageLock lock;  // ensure thread safety for the duration of this function
+#if BOARD_NM_EPD_420
+  return HalFile(std::make_unique<HalFile::Impl>(nmSd.open(path, oflag)));
+#else
   return HalFile(std::make_unique<HalFile::Impl>(SDCard.open(path, oflag)));
+#endif
 }
 
-bool HalStorage::mkdir(const char* path, const bool pFlag) { HAL_STORAGE_WRAPPED_CALL(mkdir, path, pFlag); }
+bool HalStorage::mkdir(const char* path, const bool pFlag) {
+#if BOARD_NM_EPD_420
+  StorageLock lock;
+  return pFlag ? nmSd.mkdir(path, true) : nmSd.mkdir(path);
+#else
+  HAL_STORAGE_WRAPPED_CALL(mkdir, path, pFlag);
+#endif
+}
 
-bool HalStorage::exists(const char* path) { HAL_STORAGE_WRAPPED_CALL(exists, path); }
+bool HalStorage::exists(const char* path) {
+#if BOARD_NM_EPD_420
+  StorageLock lock;
+  return nmSd.exists(path);
+#else
+  HAL_STORAGE_WRAPPED_CALL(exists, path);
+#endif
+}
 
-bool HalStorage::remove(const char* path) { HAL_STORAGE_WRAPPED_CALL(remove, path); }
+bool HalStorage::remove(const char* path) {
+#if BOARD_NM_EPD_420
+  StorageLock lock;
+  return nmSd.remove(path);
+#else
+  HAL_STORAGE_WRAPPED_CALL(remove, path);
+#endif
+}
 bool HalStorage::rename(const char* oldPath, const char* newPath) {
+#if BOARD_NM_EPD_420
+  StorageLock lock;
+  return nmSd.rename(oldPath, newPath);
+#else
   HAL_STORAGE_WRAPPED_CALL(rename, oldPath, newPath);
+#endif
 }
 
-bool HalStorage::rmdir(const char* path) { HAL_STORAGE_WRAPPED_CALL(rmdir, path); }
+bool HalStorage::rmdir(const char* path) {
+#if BOARD_NM_EPD_420
+  StorageLock lock;
+  return nmSd.rmdir(path);
+#else
+  HAL_STORAGE_WRAPPED_CALL(rmdir, path);
+#endif
+}
 
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, HalFile& file) {
   StorageLock lock;  // ensure thread safety for the duration of this function
+#if BOARD_NM_EPD_420
+  (void)moduleName;
+  FsFile fsFile = nmSd.open(path, O_RDONLY);
+  bool ok = static_cast<bool>(fsFile);
+#else
   FsFile fsFile;
   bool ok = SDCard.openFileForRead(moduleName, path, fsFile);
+#endif
   file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
   return ok;
 }
@@ -104,8 +280,14 @@ bool HalStorage::openFileForRead(const char* moduleName, const String& path, Hal
 
 bool HalStorage::openFileForWrite(const char* moduleName, const char* path, HalFile& file) {
   StorageLock lock;  // ensure thread safety for the duration of this function
+#if BOARD_NM_EPD_420
+  (void)moduleName;
+  FsFile fsFile = nmSd.open(path, O_WRONLY | O_CREAT | O_TRUNC);
+  bool ok = static_cast<bool>(fsFile);
+#else
   FsFile fsFile;
   bool ok = SDCard.openFileForWrite(moduleName, path, fsFile);
+#endif
   file = HalFile(std::make_unique<HalFile::Impl>(std::move(fsFile)));
   return ok;
 }
@@ -118,7 +300,14 @@ bool HalStorage::openFileForWrite(const char* moduleName, const String& path, Ha
   return openFileForWrite(moduleName, path.c_str(), file);
 }
 
-bool HalStorage::removeDir(const char* path) { HAL_STORAGE_WRAPPED_CALL(removeDir, path); }
+bool HalStorage::removeDir(const char* path) {
+#if BOARD_NM_EPD_420
+  StorageLock lock;
+  return nmSd.rmdir(path);
+#else
+  HAL_STORAGE_WRAPPED_CALL(removeDir, path);
+#endif
+}
 
 // HalFile implementation
 // Allow doing file operations while ensuring thread safety via HalStorage's mutex.
