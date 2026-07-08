@@ -13,3 +13,6 @@
 - Added `env:nm_epd_420` to `platformio.ini`.
 - Added NM-EPD-420 pin definitions, UC8179 display driver files, conditional display HAL, conditional SdFat storage HAL, conditional two-button GPIO/input path, battery ADC handling, and ESP32-S3-safe panic wrapper behavior.
 - Added native unit test source for `TwoButtonInputMapper`, but did not run it because project instructions forbid `pio test`.
+- Updated two-button mapping for NM-EPD-420 board structure: BOOT short emits confirm/next cluster, USER short emits back/previous cluster, BOOT long emits down/page-forward, USER long emits up/page-back.
+- Tried `pio test -e native -f test_two_button_input_mapper`; it cannot build because `gcc`/`g++` are not available in PATH.
+- Tried COM12 upload with `pio run -e nm_epd_420 --target upload --upload-port COM12`; using a short `PLATFORMIO_CORE_DIR` fixed the original Windows path unpack issue, but package downloads repeatedly produced bad/corrupt zip errors before project compilation started.

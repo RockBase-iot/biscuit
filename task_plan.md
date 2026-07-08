@@ -59,3 +59,5 @@ Primary blockers:
 | --- | --- | --- |
 | `python` not found in PATH | Tried planning-with-files catchup script | Logged environment issue and continued with manual project inspection. |
 | Build/test forbidden by repo rules | Needed for compile validation | Added test source and ran static checks only; owner must run PlatformIO validation. |
+| Native mapper test cannot start | `pio test -e native -f test_two_button_input_mapper` | PlatformIO reaches build stage but host lacks `gcc`/`g++` in PATH. |
+| COM12 upload blocked before compile | `pio run -e nm_epd_420 --target upload --upload-port COM12` | Long user-profile PlatformIO path failed unpacking; short `PLATFORMIO_CORE_DIR` fixed that, but repeated GitHub package downloads ended as corrupt/bad zip before project compilation. |

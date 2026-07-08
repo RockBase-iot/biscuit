@@ -12,54 +12,54 @@ void advance(TwoButtonInputMapper& mapper, bool user, bool boot, uint32_t fromMs
 }
 }  // namespace
 
-void test_user_short_press_emits_next_cluster() {
-  TwoButtonInputMapper mapper;
-
-  advance(mapper, true, false, 0, 80);
-  advance(mapper, false, false, 120, 150);
-
-  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Down));
-  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Right));
-  TEST_ASSERT_TRUE(mapper.wasPressed(Button::PageForward));
-  TEST_ASSERT_TRUE(mapper.wasReleased(Button::Down));
-  TEST_ASSERT_FALSE(mapper.wasPressed(Button::Confirm));
-}
-
-void test_boot_short_press_emits_previous_cluster() {
+void test_boot_short_press_emits_confirm_and_next_cluster() {
   TwoButtonInputMapper mapper;
 
   advance(mapper, false, true, 0, 80);
   advance(mapper, false, false, 120, 150);
 
-  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Up));
-  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Left));
-  TEST_ASSERT_TRUE(mapper.wasPressed(Button::PageBack));
-  TEST_ASSERT_TRUE(mapper.wasReleased(Button::Up));
+  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Confirm));
+  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Down));
+  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Right));
+  TEST_ASSERT_TRUE(mapper.wasPressed(Button::PageForward));
   TEST_ASSERT_FALSE(mapper.wasPressed(Button::Back));
 }
 
-void test_user_long_press_emits_confirm_without_next_cluster() {
+void test_user_short_press_emits_back_and_previous_cluster() {
   TwoButtonInputMapper mapper;
 
-  advance(mapper, true, false, 0, 700);
-  advance(mapper, false, false, 760, 790);
+  advance(mapper, true, false, 0, 80);
+  advance(mapper, false, false, 120, 150);
 
-  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Confirm));
-  TEST_ASSERT_TRUE(mapper.wasReleased(Button::Confirm));
-  TEST_ASSERT_FALSE(mapper.wasPressed(Button::Down));
-  TEST_ASSERT_FALSE(mapper.wasPressed(Button::PageForward));
+  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Back));
+  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Up));
+  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Left));
+  TEST_ASSERT_TRUE(mapper.wasPressed(Button::PageBack));
+  TEST_ASSERT_FALSE(mapper.wasPressed(Button::Confirm));
 }
 
-void test_boot_long_press_emits_back_without_previous_cluster() {
+void test_boot_long_press_emits_down_and_next_page_without_confirm() {
   TwoButtonInputMapper mapper;
 
   advance(mapper, false, true, 0, 700);
   advance(mapper, false, false, 760, 790);
 
-  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Back));
-  TEST_ASSERT_TRUE(mapper.wasReleased(Button::Back));
-  TEST_ASSERT_FALSE(mapper.wasPressed(Button::Up));
-  TEST_ASSERT_FALSE(mapper.wasPressed(Button::PageBack));
+  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Down));
+  TEST_ASSERT_TRUE(mapper.wasPressed(Button::PageForward));
+  TEST_ASSERT_FALSE(mapper.wasPressed(Button::Confirm));
+  TEST_ASSERT_FALSE(mapper.wasPressed(Button::Back));
+}
+
+void test_user_long_press_emits_up_and_previous_page_without_back() {
+  TwoButtonInputMapper mapper;
+
+  advance(mapper, true, false, 0, 700);
+  advance(mapper, false, false, 760, 790);
+
+  TEST_ASSERT_TRUE(mapper.wasPressed(Button::Up));
+  TEST_ASSERT_TRUE(mapper.wasPressed(Button::PageBack));
+  TEST_ASSERT_FALSE(mapper.wasPressed(Button::Back));
+  TEST_ASSERT_FALSE(mapper.wasPressed(Button::Confirm));
 }
 
 void test_two_button_hold_emits_power_and_suppresses_single_actions() {
@@ -85,10 +85,10 @@ void tearDown() {}
 
 int main() {
   UNITY_BEGIN();
-  RUN_TEST(test_user_short_press_emits_next_cluster);
-  RUN_TEST(test_boot_short_press_emits_previous_cluster);
-  RUN_TEST(test_user_long_press_emits_confirm_without_next_cluster);
-  RUN_TEST(test_boot_long_press_emits_back_without_previous_cluster);
+  RUN_TEST(test_boot_short_press_emits_confirm_and_next_cluster);
+  RUN_TEST(test_user_short_press_emits_back_and_previous_cluster);
+  RUN_TEST(test_boot_long_press_emits_down_and_next_page_without_confirm);
+  RUN_TEST(test_user_long_press_emits_up_and_previous_page_without_back);
   RUN_TEST(test_two_button_hold_emits_power_and_suppresses_single_actions);
   return UNITY_END();
 }
