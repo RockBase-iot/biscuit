@@ -59,7 +59,14 @@ class GfxRenderer {
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay)
-      : display(halDisplay), renderMode(BW), orientation(Portrait), fadingFix(false) {}
+      : display(halDisplay),
+        renderMode(BW),
+#if BOARD_NM_EPD_420
+        orientation(LandscapeCounterClockwise),
+#else
+        orientation(Portrait),
+#endif
+        fadingFix(false) {}
   ~GfxRenderer() { freeBwBufferChunks(); }
 
   static constexpr int VIEWABLE_MARGIN_TOP = 9;

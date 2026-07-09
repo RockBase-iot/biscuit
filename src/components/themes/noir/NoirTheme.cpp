@@ -34,8 +34,13 @@ constexpr int cornerRadius = 6;
 constexpr int topHintButtonY = 345;
 constexpr int maxSubtitleWidth = 100;
 constexpr int maxListValueWidth = 200;
+#if BOARD_NM_EPD_420
+constexpr int mainMenuIconSize = 24;
+constexpr int listIconSize = 24;
+#else
 constexpr int mainMenuIconSize = 32;
 constexpr int listIconSize = 24;
+#endif
 
 const uint8_t* iconForName(UIIcon icon, int size) {
   if (size == 24) {
@@ -316,6 +321,10 @@ void NoirTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 
 void NoirTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
+  if (BaseTheme::drawNmButtonHintsIfNeeded(renderer, btn1, btn2, btn3, btn4, true)) {
+    return;
+  }
+
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
@@ -348,6 +357,10 @@ void NoirTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
 }
 
 void NoirTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
+  if (gpio.deviceIsNmEpd420()) {
+    return;
+  }
+
   const int screenWidth = renderer.getScreenWidth();
   constexpr int buttonWidth = NoirMetrics::values.sideButtonHintsWidth;
   constexpr int buttonHeight = 78;

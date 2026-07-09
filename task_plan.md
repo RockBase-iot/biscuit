@@ -45,6 +45,7 @@ Primary blockers:
 | Two-button input | complete | Added `TwoButtonInputMapper` and conditional `HalGPIO` integration. |
 | Storage HAL | complete | Added conditional SdFat/HSPI implementation for NM SD card. |
 | Power/system | complete | Added NM ADC battery path, simple deep sleep wake, and ESP32-S3-safe panic wrapper behavior. |
+| Landscape UI pass | complete | Set NM non-reader UI to native landscape, changed AppsMenu to 4x2 compact layout, and added NM-safe compact button hints. |
 | Verification | blocked | Repo instructions prohibit PlatformIO build/test; only static checks were run. |
 
 ## Constraints
@@ -61,3 +62,4 @@ Primary blockers:
 | Build/test forbidden by repo rules | Needed for compile validation | Added test source and ran static checks only; owner must run PlatformIO validation. |
 | Native mapper test cannot start | `pio test -e native -f test_two_button_input_mapper` | PlatformIO reaches build stage but host lacks `gcc`/`g++` in PATH. |
 | COM12 upload blocked before compile | `pio run -e nm_epd_420 --target upload --upload-port COM12` | Long user-profile PlatformIO path failed unpacking; short `PLATFORMIO_CORE_DIR` fixed that, but repeated GitHub package downloads ended as corrupt/bad zip before project compilation. |
+| NM AppsMenu display overflow | Attached boot log showed many GFX outside-range messages after entering AppsMenu | Root cause was portrait coordinate rotation plus fixed X4-style button hint coordinates on a 400x300 panel; NM UI now defaults to native landscape and uses compact hints. |

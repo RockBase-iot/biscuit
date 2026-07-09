@@ -151,5 +151,7 @@ class BaseTheme {
   virtual void drawSpinner(const GfxRenderer& renderer, int centerX, int centerY,
                            const char* label, int frame) const;
 
+  static bool drawNmButtonHintsIfNeeded(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
+                                        const char* btn4, bool inverted = false, bool bracketed = false);
   static bool drawArrowIfNeeded(const GfxRenderer& renderer, const char* label, int cx, int cy, int size = 5, bool black = true);
 };

@@ -18,8 +18,13 @@ class AppsMenuActivity final : public Activity {
  private:
   int selectorIndex = 0;
   static constexpr int ITEM_COUNT = 8;
+#if BOARD_NM_EPD_420
+  static constexpr int COLS = 4;
+  static constexpr int ROWS = 2;
+#else
   static constexpr int COLS = 2;
   static constexpr int ROWS = 4;
+#endif
 
   // Grid navigation
   int getRow() const { return selectorIndex / COLS; }

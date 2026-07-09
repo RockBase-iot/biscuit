@@ -268,6 +268,10 @@ void MilitaryTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCou
 // --- Button hints: bracket-style labels ---
 void MilitaryTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                     const char* btn4) const {
+  if (BaseTheme::drawNmButtonHintsIfNeeded(renderer, btn1, btn2, btn3, btn4, false, true)) {
+    return;
+  }
+
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 

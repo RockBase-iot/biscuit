@@ -1,6 +1,7 @@
 #include "BaseTheme.h"
 
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -184,8 +185,46 @@ bool BaseTheme::drawArrowIfNeeded(const GfxRenderer& renderer, const char* label
   }
 }
 
+bool BaseTheme::drawNmButtonHintsIfNeeded(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
+                                          const char* btn4, bool inverted, bool bracketed) {
+  if (!gpio.deviceIsNmEpd420()) {
+    return false;
+  }
+
+  const char* labels[] = {btn1, btn2, btn3, btn4};
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  constexpr int sidePad = 8;
+  constexpr int gap = 4;
+  constexpr int height = 26;
+  const int y = pageHeight - height + 6;
+  const int slotWidth = (pageWidth - sidePad * 2 - gap * 3) / 4;
+
+  for (int i = 0; i < 4; ++i) {
+    const char* label = labels[i];
+    if (label == nullptr || label[0] == '\0') {
+      continue;
+    }
+
+    const int x = sidePad + i * (slotWidth + gap);
+    renderer.fillRect(x, pageHeight - height - 1, slotWidth, height, inverted);
+    renderer.drawRect(x, pageHeight - height - 1, slotWidth, height, !inverted);
+
+    std::string text = bracketed ? (std::string("[") + label + "]") : std::string(label);
+    text = renderer.truncatedText(SMALL_FONT_ID, text.c_str(), slotWidth - 6);
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, text.c_str());
+    renderer.drawText(SMALL_FONT_ID, x + (slotWidth - textWidth) / 2, y, text.c_str(), !inverted);
+  }
+
+  return true;
+}
+
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4) const {
+  if (drawNmButtonHintsIfNeeded(renderer, btn1, btn2, btn3, btn4)) {
+    return;
+  }
+
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
@@ -218,6 +257,10 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
 }
 
 void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
+  if (gpio.deviceIsNmEpd420()) {
+    return;
+  }
+
   const int screenWidth = renderer.getScreenWidth();
   constexpr int buttonWidth = BaseMetrics::values.sideButtonHintsWidth;  // Width on screen (height when rotated)
   constexpr int buttonHeight = 80;                                       // Height on screen (width when rotated)

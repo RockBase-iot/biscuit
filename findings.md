@@ -25,6 +25,11 @@
 - Storage availability: MicroSD versus internal flash/LittleFS.
 - Power/battery telemetry support and sleep/wake behavior.
 - Flash size and RAM/PSRAM budget versus current firmware footprint.
+- NM-EPD-420 UI orientation must stay in native 400x300 landscape for non-reader screens. The old default portrait
+  transform maps logical `(x,y)` to physical `(y, height - 1 - x)`, which makes logical x values over 299 produce
+  negative physical y values on the 400x300 panel.
+- Theme button hints used fixed X4 portrait button coordinates and temporarily forced portrait orientation; on NM this
+  can draw outside the panel even after the main activity layout is made landscape.
 
 ## Compatibility Analysis
 
