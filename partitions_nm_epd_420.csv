@@ -1,0 +1,10 @@
+# NM-EPD-420 16MB flash layout
+# Single large application slot for this feature-heavy firmware.
+# No OTA second slot; firmware is expected to be updated over serial.
+#
+# Name,   Type, SubType, Offset,   Size,     Flags
+nvs,      data, nvs,     0x9000,   0x5000,
+otadata,  data, ota,     0xe000,   0x2000,
+app0,     app,  ota_0,   0x10000,  0xC00000,
+spiffs,   data, spiffs,  0xC10000, 0x3E0000,
+coredump, data, coredump,0xFF0000, 0x10000,
