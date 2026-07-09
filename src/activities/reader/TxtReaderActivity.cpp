@@ -1,11 +1,13 @@
 #include "TxtReaderActivity.h"
 
+#include <Arduino.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Serialization.h>
 #include <Utf8.h>
+#include <esp_task_wdt.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -17,9 +19,104 @@
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
+constexpr uint32_t LONG_OPERATION_SERVICE_INTERVAL_MS = 20;
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
 constexpr uint8_t CACHE_VERSION = 2;          // Increment when cache format changes
+
+bool isUtf8ContinuationByte(char c) {
+  return (static_cast<uint8_t>(c) & 0xC0) == 0x80;
+}
+
+size_t previousUtf8Boundary(const std::string& text, size_t pos) {
+  if (pos >= text.length()) {
+    return text.length();
+  }
+  while (pos > 0 && isUtf8ContinuationByte(text[pos])) {
+    pos--;
+  }
+  return pos;
+}
+
+size_t nextUtf8Boundary(const std::string& text, size_t pos) {
+  if (pos >= text.length()) {
+    return text.length();
+  }
+  pos++;
+  while (pos < text.length() && isUtf8ContinuationByte(text[pos])) {
+    pos++;
+  }
+  return pos;
+}
+
+void serviceLongOperation(uint32_t& lastServiceMs, bool force = false) {
+  const uint32_t now = millis();
+  if (!force && now - lastServiceMs < LONG_OPERATION_SERVICE_INTERVAL_MS) {
+    return;
+  }
+
+  esp_task_wdt_reset();
+  vTaskDelay(1);
+  lastServiceMs = millis();
+}
+
+size_t findWrappedBreak(GfxRenderer& renderer, int fontId, const std::string& line, int viewportWidth,
+                        uint32_t* serviceMs) {
+  if (line.empty()) {
+    return 0;
+  }
+
+  if (viewportWidth <= 0) {
+    return nextUtf8Boundary(line, 0);
+  }
+
+  auto prefixFits = [&](size_t byteCount) {
+    byteCount = previousUtf8Boundary(line, byteCount);
+    if (byteCount == 0) {
+      return false;
+    }
+
+    const auto prefix = line.substr(0, byteCount);
+    const bool fits = renderer.getTextWidth(fontId, prefix.c_str()) <= viewportWidth;
+    if (serviceMs) {
+      serviceLongOperation(*serviceMs);
+    }
+    return fits;
+  };
+
+  size_t lower = 0;
+  size_t upper = line.length();
+
+  while (nextUtf8Boundary(line, lower) < upper) {
+    size_t mid = previousUtf8Boundary(line, lower + (upper - lower) / 2);
+    if (mid <= lower) {
+      mid = nextUtf8Boundary(line, lower);
+    }
+    if (mid >= upper) {
+      mid = previousUtf8Boundary(line, upper - 1);
+    }
+    if (mid <= lower || mid >= upper) {
+      break;
+    }
+
+    if (prefixFits(mid)) {
+      lower = mid;
+    } else {
+      upper = mid;
+    }
+  }
+
+  if (lower == 0) {
+    lower = nextUtf8Boundary(line, 0);
+  }
+
+  const size_t spacePos = line.rfind(' ', lower > 0 ? lower - 1 : 0);
+  if (spacePos != std::string::npos && spacePos > 0) {
+    return spacePos;
+  }
+
+  return lower;
+}
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
@@ -133,16 +230,18 @@ void TxtReaderActivity::buildPageIndex() {
 
   size_t offset = 0;
   const size_t fileSize = txt->getFileSize();
+  uint32_t lastServiceMs = millis();
 
   LOG_DBG("TRS", "Building page index for %zu bytes...", fileSize);
 
   GUI.drawPopup(renderer, tr(STR_INDEXING));
+  serviceLongOperation(lastServiceMs, true);
 
   while (offset < fileSize) {
     std::vector<std::string> tempLines;
     size_t nextOffset = offset;
 
-    if (!loadPageAtOffset(offset, tempLines, nextOffset)) {
+    if (!loadPageAtOffset(offset, tempLines, nextOffset, &lastServiceMs)) {
       break;
     }
 
@@ -156,17 +255,15 @@ void TxtReaderActivity::buildPageIndex() {
       pageOffsets.push_back(offset);
     }
 
-    // Yield to other tasks periodically
-    if (pageOffsets.size() % 20 == 0) {
-      vTaskDelay(1);
-    }
+    serviceLongOperation(lastServiceMs);
   }
 
   totalPages = pageOffsets.size();
   LOG_DBG("TRS", "Built page index: %d pages", totalPages);
 }
 
-bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset) {
+bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>& outLines, size_t& nextOffset,
+                                         uint32_t* serviceMs) {
   outLines.clear();
   const size_t fileSize = txt->getFileSize();
 
@@ -187,6 +284,9 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     return false;
   }
   buffer[chunkSize] = '\0';
+  if (serviceMs) {
+    serviceLongOperation(*serviceMs);
+  }
 
   // Parse lines from buffer
   size_t pos = 0;
@@ -221,35 +321,21 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
 
     // Word wrap if needed
     while (!line.empty() && static_cast<int>(outLines.size()) < linesPerPage) {
-      int lineWidth = renderer.getTextWidth(cachedFontId, line.c_str());
+      if (static_cast<int>(line.length()) <= viewportWidth) {
+        int lineWidth = renderer.getTextWidth(cachedFontId, line.c_str());
+        if (serviceMs) {
+          serviceLongOperation(*serviceMs);
+        }
 
-      if (lineWidth <= viewportWidth) {
-        outLines.push_back(line);
-        lineBytePos = displayLen;  // Consumed entire display content
-        line.clear();
-        break;
-      }
-
-      // Find break point
-      size_t breakPos = line.length();
-      while (breakPos > 0 && renderer.getTextWidth(cachedFontId, line.substr(0, breakPos).c_str()) > viewportWidth) {
-        // Try to break at space
-        size_t spacePos = line.rfind(' ', breakPos - 1);
-        if (spacePos != std::string::npos && spacePos > 0) {
-          breakPos = spacePos;
-        } else {
-          // Break at character boundary for UTF-8
-          breakPos--;
-          // Make sure we don't break in the middle of a UTF-8 sequence
-          while (breakPos > 0 && (line[breakPos] & 0xC0) == 0x80) {
-            breakPos--;
-          }
+        if (lineWidth <= viewportWidth) {
+          outLines.push_back(line);
+          lineBytePos = displayLen;  // Consumed entire display content
+          line.clear();
+          break;
         }
       }
 
-      if (breakPos == 0) {
-        breakPos = 1;
-      }
+      const size_t breakPos = findWrappedBreak(renderer, cachedFontId, line, viewportWidth, serviceMs);
 
       outLines.push_back(line.substr(0, breakPos));
 
@@ -317,7 +403,8 @@ void TxtReaderActivity::render(RenderLock&&) {
   size_t offset = pageOffsets[currentPage];
   size_t nextOffset;
   currentPageLines.clear();
-  loadPageAtOffset(offset, currentPageLines, nextOffset);
+  uint32_t lastServiceMs = millis();
+  loadPageAtOffset(offset, currentPageLines, nextOffset, &lastServiceMs);
 
   renderer.clearScreen();
   renderPage();

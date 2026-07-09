@@ -58,3 +58,14 @@
 - Added diagnostics in `FileBrowserActivity` and `SdFileBrowserActivity` so empty screens report whether the directory
   could not be opened or whether all entries were hidden/unsupported after filtering.
 - No PlatformIO build/test was run because `.CLAUDE.md` forbids build commands in this repo.
+
+## 2026-07-09 TXT Reader Watchdog
+
+- Investigated the reboot while opening a 217925 byte Chinese TXT file on NM-EPD-420. The log reaches `Building page
+  index...` and then the task watchdog reports CPU0 running `ActivityManager`, matching long synchronous TXT page-index
+  work inside the render task.
+- Updated TXT wrapping so long no-space UTF-8 lines use a boundary-safe binary search for the visible prefix instead of
+  decrementing one byte/character at a time and remeasuring every substring.
+- Added timed watchdog/CPU servicing during TXT page-index building and page loading so long SD reads, width measurements,
+  and wrapping loops yield to other FreeRTOS tasks.
+- Static verification only; no PlatformIO build/test was run because `.CLAUDE.md` forbids build commands in this repo.

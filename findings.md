@@ -42,6 +42,9 @@
   access, initializes the SPI bus without passing CS to `SPI.begin()`, and lets the SD driver own CS. Biscuit's NM port
   previously left LoRa NSS high-Z and had no diagnostics for mount/root/list failures, which explains a `No files found`
   UI with no SD-related serial evidence.
+- TXT reader indexing runs from the render task on first open. For Chinese TXT files with long no-space lines, the old
+  wrap routine repeatedly measured progressively shorter substrings and could keep CPU0 busy long enough to trip the
+  task watchdog while building the page index.
 
 ## Compatibility Analysis
 
