@@ -37,3 +37,9 @@
 - Reduced render/log contention on NM-EPD-420 by disabling GxEPD2 diagnostic serial output and skipping periodic MEM log prints while the render lock is busy.
 - Checked the current NM display drivers for fast partial refresh: UC8179 has no partial/fast partial support, and GDEY042Z98 has partial RAM addressing but still performs full-screen refresh; no button-click partial refresh path was enabled.
 - Static verification only; no PlatformIO build/test was run because `.CLAUDE.md` forbids build commands in this repo.
+
+## 2026-07-09 Controls Documentation
+
+- Added `docs/nm-epd-420-controls.md` as the canonical NM-EPD-420 USER/BOOT operation guide.
+- Updated `USER_GUIDE.md` with the NM two-button layout, dashboard/list notes, and reader-mode notes.
+- Updated `README.md` with a short NM-EPD-420 port controls table and a link to the full control guide.

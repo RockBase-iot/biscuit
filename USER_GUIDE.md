@@ -44,6 +44,20 @@ The device utilises the standard buttons on the Xteink X4 (in the same layout as
 
 Button layout can be customized in the **[Controls Settings](#363-controls)**.
 
+### NM-EPD-420 Button Layout
+
+The NM-EPD-420 port uses the board's two built-in buttons:
+
+| Action | Meaning |
+| --- | --- |
+| **USER** short press | Back / previous item |
+| **BOOT** short press | Confirm / next item |
+| Hold **USER** | Up / previous page |
+| Hold **BOOT** | Down / next page |
+| Hold **USER + BOOT** | Logical Power action |
+
+NM-EPD-420 screens may show the compact hint row `U hold ^ | USER < | BOOT > | B hold v`. See [NM-EPD-420 Controls](./docs/nm-epd-420-controls.md) for the full mapping and timing details.
+
 ### Taking a Screenshot
 When the Power Button and Volume Down button are pressed at the same time, it will take a screenshot and save it in the folder `screenshots/`.
 
@@ -80,6 +94,8 @@ A status bar at the top shows battery, heap, uptime, and WiFi status.
 
 Navigate tiles with Left/Right (front buttons) and Up/Down (side buttons). Press Confirm to enter a category.
 
+On NM-EPD-420, use **USER** for previous/back and **BOOT** for next/confirm. Hold **USER** or **BOOT** to move by row or page where supported.
+
 ### 3.2 Reading Mode
 
 See [Reading Mode](#4-reading-mode) below for more information.
@@ -91,6 +107,8 @@ The Browse Files screen acts as a file and folder browser.
 * **Navigate List:** Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to move the selection cursor up and down through folders and books. You can also long-press these buttons to scroll a full page up or down.
 * **Open Selection:** Press **Confirm** to open a folder or read a selected book. 
 * **Delete Files:** Hold and release **Confirm** to delete the selected file. You will be given an option to either confirm or cancel deletion. Folder deletion is not supported.
+
+On NM-EPD-420, use **USER** short press for back/previous and **BOOT** short press for open/next. Hold **USER** or **BOOT** for page-level movement where supported.
 
 ### 3.4 Recent Books Screen
 
@@ -358,6 +376,8 @@ Once you have opened a book, the button layout changes to facilitate reading.
 The role of the volume (side) buttons can be swapped in the **[Controls Settings](#363-controls)**.
 
 If the **Short Power Button Click** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
+
+On NM-EPD-420, **USER** maps to the previous-page side and **BOOT** maps to the next-page side. Hold **USER** or **BOOT** for page or chapter-level movement, depending on the reader settings.
 
 ### Chapter Navigation
 * **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button briefly, then release.

@@ -53,6 +53,8 @@
 - Biscuit currently depends on `open-x4-sdk` libraries for display, input, SD, and battery. The local submodule path exists in `.gitmodules`, but `open-x4-sdk/libs` was not present in this checkout.
 - The display backend assumes an `EInkDisplay` class with a 1-bit framebuffer and fast/half/full refresh modes. NM-EPD-420 uses GxEPD2 3-color panel classes and exposes no partial refresh support in its custom UC8179 class.
 - Existing UX assumes 7 physical buttons: Back, Confirm, Left, Right, Up, Down, Power. NM-EPD-420 factory firmware exposes USER and BOOT only.
+- NM-EPD-420 control docs now live in `docs/nm-epd-420-controls.md`: USER short = back/previous, BOOT short =
+  confirm/next, USER hold = up/previous page, BOOT hold = down/next page, USER+BOOT hold = logical Power.
 - Existing `GfxRenderer` orientation comments and some utilities still describe 480x800 / 800x480 logical modes. They may compute correctly from runtime dimensions, but the 400x300 UX must be verified screen-by-screen.
 - `HalPowerManager` currently contains X4-specific power latch behavior and X3/X4 battery detection. NM-EPD-420 needs an ADC-enable sampling path using GPIO43/GPIO3.
 - `HalSystem` panic wrapping copies ESP32-C3/RISC-V backtrace behavior; ESP32-S3 uses a different CPU architecture, so this must be conditional or disabled initially.
@@ -79,6 +81,7 @@
 
 - Implement a two-button `HalGPIO`/input adapter for USER and BOOT.
 - Define a usable navigation policy: short/long press, chord, or require external keys.
+- Keep `USER short`, `BOOT short`, `USER hold`, `BOOT hold`, and `USER+BOOT hold` documentation in sync with `TwoButtonInputMapper`.
 - Disable or hide button remap settings if only two physical buttons are present.
 - Revisit text entry and games, because many flows assume directional input.
 

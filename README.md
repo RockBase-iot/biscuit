@@ -26,6 +26,20 @@ The 4.26" e-ink display is readable in direct sunlight, retains its image withou
 | Storage | MicroSD (FAT32) |
 | Port | USB-C (serial + power) |
 
+### NM-EPD-420 Port
+
+The NM-EPD-420 port targets the board's two built-in buttons instead of the X4 seven-button layout. The compact control model is:
+
+| Action | Meaning |
+| --- | --- |
+| USER short press | Back / previous item |
+| BOOT short press | Confirm / next item |
+| USER hold | Up / previous page |
+| BOOT hold | Down / next page |
+| USER + BOOT hold | Logical Power action |
+
+See [NM-EPD-420 Controls](./docs/nm-epd-420-controls.md) for the full button mapping, timing thresholds, and on-screen hint labels.
+
 ## Apps
 
 The home screen is a dashboard of eight tiles. Everything lives under one of them.

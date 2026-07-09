@@ -48,6 +48,7 @@ Primary blockers:
 | Landscape UI pass | complete | Set NM non-reader UI to native landscape, changed AppsMenu to 4x2 compact layout, and added NM-safe compact button hints. |
 | NM two-button UX pass | complete | Bottom hints now match USER/BOOT short/hold behavior, and menu screens prioritize BOOT short confirm over same-event navigation. |
 | NM render/reset stabilization | complete | Replaced ESP32-S3-incompatible null FreeRTOS critical locks and reduced serial/log activity during display refresh. |
+| NM controls documentation | complete | Added `docs/nm-epd-420-controls.md` and linked the USER/BOOT operation model from user-facing docs. |
 | Verification | blocked | Repo instructions prohibit PlatformIO build/test; only static checks were run. |
 
 ## Constraints
