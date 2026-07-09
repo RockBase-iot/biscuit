@@ -103,6 +103,7 @@ void FileBrowserActivity::loadFiles() {
           FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
           FsHelpers::hasBmpExtension(filename)) {
         files.emplace_back(filename);
+        LOG_DBG("FileBrowser", "Supported file: %s size=%lu", name, static_cast<unsigned long>(file.size()));
       } else {
         unsupportedCount++;
       }

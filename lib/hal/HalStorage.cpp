@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cassert>
+#include <cstring>
 
 #if !BOARD_NM_EPD_420
 #define SDCard SDCardManager::getInstance()
@@ -53,6 +54,10 @@ void logNmSdVolumeInfo() {
   LOG_INF("SD", "NM SD mounted: cardType=%u sectors=%llu fat=%u clusters=%lu", static_cast<unsigned>(cardType),
           static_cast<unsigned long long>(sectorCount), static_cast<unsigned>(fatType),
           static_cast<unsigned long>(clusterCount));
+}
+
+bool shouldLogNmFileOpen(const char* moduleName) {
+  return moduleName && (strcmp(moduleName, "ZIP") == 0 || strcmp(moduleName, "XTC") == 0);
 }
 }  // namespace
 #endif
@@ -309,9 +314,16 @@ bool HalStorage::rmdir(const char* path) {
 bool HalStorage::openFileForRead(const char* moduleName, const char* path, HalFile& file) {
   StorageLock lock;  // ensure thread safety for the duration of this function
 #if BOARD_NM_EPD_420
-  (void)moduleName;
   FsFile fsFile = nmSd.open(path, O_RDONLY);
   bool ok = static_cast<bool>(fsFile);
+  if (!ok) {
+    LOG_ERR("SD", "%s open read failed: %s error=0x%02x data=0x%02x", moduleName ? moduleName : "?",
+            path ? path : "(null)", static_cast<unsigned>(nmSd.sdErrorCode()),
+            static_cast<unsigned>(nmSd.sdErrorData()));
+  } else if (shouldLogNmFileOpen(moduleName)) {
+    LOG_DBG("SD", "%s open read: %s size=%lu", moduleName, path ? path : "(null)",
+            static_cast<unsigned long>(fsFile.size()));
+  }
 #else
   FsFile fsFile;
   bool ok = SDCard.openFileForRead(moduleName, path, fsFile);

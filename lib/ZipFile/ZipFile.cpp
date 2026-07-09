@@ -5,6 +5,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 
 struct ZipInflateCtx {
@@ -19,16 +20,43 @@ namespace {
 constexpr uint16_t ZIP_METHOD_STORED = 0;
 constexpr uint16_t ZIP_METHOD_DEFLATED = 8;
 constexpr uint32_t ZIP_EOCD_SIGNATURE = 0x06054b50;
+constexpr uint32_t ZIP_LOCAL_FILE_HEADER_SIGNATURE = 0x04034b50;
+constexpr uint32_t ZIP_SPANNED_SIGNATURE = 0x08074b50;
 constexpr size_t ZIP_EOCD_MIN_SIZE = 22;
 constexpr size_t ZIP_MAX_COMMENT_SIZE = 0xFFFF;
 constexpr size_t ZIP_EOCD_SEARCH_MAX = ZIP_EOCD_MIN_SIZE + ZIP_MAX_COMMENT_SIZE;
 constexpr size_t ZIP_EOCD_SCAN_CHUNK = 1024;
+constexpr size_t ZIP_PROBE_BYTES = 16;
 
 uint16_t readLe16(const uint8_t* p) { return static_cast<uint16_t>(p[0] | (p[1] << 8)); }
 
 uint32_t readLe32(const uint8_t* p) {
   return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) | (static_cast<uint32_t>(p[2]) << 16) |
          (static_cast<uint32_t>(p[3]) << 24);
+}
+
+bool isZipStartSignature(const uint8_t* p, const size_t len) {
+  if (len < sizeof(uint32_t)) {
+    return false;
+  }
+  const uint32_t signature = readLe32(p);
+  return signature == ZIP_LOCAL_FILE_HEADER_SIGNATURE || signature == ZIP_EOCD_SIGNATURE ||
+         signature == ZIP_SPANNED_SIGNATURE;
+}
+
+void formatProbeBytes(const uint8_t* bytes, const size_t len, char* out, const size_t outLen) {
+  if (!out || outLen == 0) {
+    return;
+  }
+  out[0] = '\0';
+  size_t pos = 0;
+  for (size_t i = 0; i < len && pos + 4 <= outLen; i++) {
+    const int written = snprintf(out + pos, outLen - pos, "%s%02X", i == 0 ? "" : " ", bytes[i]);
+    if (written <= 0) {
+      break;
+    }
+    pos += static_cast<size_t>(written);
+  }
 }
 
 int zipReadCallback(uzlib_uncomp* uncomp) {
@@ -243,7 +271,8 @@ bool ZipFile::loadZipDetails() {
 
   const size_t fileSize = file.size();
   if (fileSize < ZIP_EOCD_MIN_SIZE) {
-    LOG_ERR("ZIP", "File too small to be a valid zip");
+    LOG_ERR("ZIP", "File too small to be a valid zip: %s size=%lu", filePath.c_str(),
+            static_cast<unsigned long>(fileSize));
     if (!wasOpen) {
       close();
     }
@@ -303,7 +332,8 @@ bool ZipFile::loadZipDetails() {
   }
 
   if (!found) {
-    LOG_ERR("ZIP", "EOCD signature not found in zip file (scanned %u bytes)", static_cast<unsigned>(scanRange));
+    LOG_ERR("ZIP", "EOCD signature not found in zip file: %s size=%lu scanned=%lu", filePath.c_str(),
+            static_cast<unsigned long>(fileSize), static_cast<unsigned long>(scanRange));
     if (!wasOpen) {
       close();
     }
@@ -337,6 +367,21 @@ bool ZipFile::loadZipDetails() {
 bool ZipFile::open() {
   if (!Storage.openFileForRead("ZIP", filePath, file)) {
     return false;
+  }
+
+  const size_t fileSize = file.size();
+  uint8_t probe[ZIP_PROBE_BYTES] = {};
+  const int rawProbeRead = file.read(probe, sizeof(probe));
+  const size_t probeRead = rawProbeRead > 0 ? static_cast<size_t>(rawProbeRead) : 0;
+  file.seek(0);
+
+  char probeHex[ZIP_PROBE_BYTES * 3] = {};
+  formatProbeBytes(probe, probeRead, probeHex, sizeof(probeHex));
+
+  LOG_DBG("ZIP", "Opened: %s size=%lu head=%s", filePath.c_str(), static_cast<unsigned long>(fileSize), probeHex);
+  if (!isZipStartSignature(probe, probeRead)) {
+    LOG_ERR("ZIP", "File does not start with a ZIP signature: %s size=%lu head=%s", filePath.c_str(),
+            static_cast<unsigned long>(fileSize), probeHex);
   }
   return true;
 }

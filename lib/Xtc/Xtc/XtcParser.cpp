@@ -39,6 +39,8 @@ XtcError XtcParser::open(const char* filepath) {
     return m_lastError;
   }
 
+  LOG_DBG("XTC", "Opened: %s size=%lu", filepath, static_cast<unsigned long>(m_file.size()));
+
   // Read header
   m_lastError = readHeader();
   if (m_lastError != XtcError::OK) {

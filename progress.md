@@ -91,3 +91,15 @@
   framebuffer path, keeping the already displayed BW page instead.
 - Hid the Text Anti-Aliasing device setting on NM-EPD-420 because the hardware path is currently unsupported.
 - Static verification only; no PlatformIO build/test was run because `.CLAUDE.md` forbids build commands in this repo.
+
+## 2026-07-09 EPUB Size Diagnostics
+
+- Re-investigated the EPUB load failure after the ZIP-comment scan fix. The reported `scanned 199 bytes` value comes
+  from the opened file size, so the current failure points to the EPUB file being seen as 199 bytes on SD rather than to
+  the EOCD search window.
+- Added NM storage diagnostics for ZIP/XTC file opens, FileBrowser supported-file size logging, ZIP open header probing,
+  clearer ZIP size/EOCD error messages, and XTC open size logging.
+- The new expected diagnostic chain is FileBrowser entry size -> `SD ZIP open read` size -> `ZIP Opened` first bytes ->
+  EOCD result. A valid EPUB should start with `50 4B 03 04`; HTML/placeholders/truncated downloads will show different
+  first bytes.
+- Static verification only; no PlatformIO build/test was run because `.CLAUDE.md` forbids build commands in this repo.

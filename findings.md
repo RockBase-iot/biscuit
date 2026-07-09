@@ -54,6 +54,11 @@
   normally first, then `Stored BW buffer` / `displayGrayBuffer` activity happens a few seconds later; the attached photo
   changes from normal black-on-white text to a dark dotted/inverted screen, matching a grayscale overlay buffer being
   sent through NM's 1-bit GxEPD2 framebuffer path rather than a real grayscale LUT.
+- The current EPUB failure is no longer consistent with "ZIP has a long comment only": the log reports
+  `EOCD signature not found ... scanned 199 bytes`, and `ZipFile::loadZipDetails()` derives that scan count from
+  `file.size()`. That means the firmware is opening `/biscuit/TheEconomist.2026.07.04.epub` as a 199-byte file. The
+  next diagnostic target is the storage/open boundary: compare FileBrowser's directory entry size, NM SdFat open size,
+  and the first ZIP bytes (`50 4B ...`) before changing EPUB parsing again.
 
 ## Compatibility Analysis
 
