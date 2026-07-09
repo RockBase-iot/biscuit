@@ -24,7 +24,7 @@ namespace {
 #if BOARD_NM_EPD_420
 bool isHiddenOnNmEpd420(const SettingInfo& setting) {
   return setting.nameId == StrId::STR_SIDE_BTN_LAYOUT || setting.nameId == StrId::STR_SHORT_PWR_BTN ||
-         setting.nameId == StrId::STR_ORIENTATION;
+         setting.nameId == StrId::STR_ORIENTATION || setting.nameId == StrId::STR_TEXT_AA;
 }
 #endif
 }  // namespace

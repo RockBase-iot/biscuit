@@ -167,7 +167,14 @@ void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) {
   }
 }
 
-void HalDisplay::displayGrayBuffer(bool turnOffScreen) { displayBuffer(FULL_REFRESH, turnOffScreen); }
+void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
+  // NM-EPD-420 currently uses a 1-bit framebuffer path on top of GxEPD2 3-color panels.
+  // The X4 grayscale overlay buffers do not map correctly here and can overwrite a
+  // valid BW page with dotted/inverted content, so keep the already displayed BW page.
+  if (turnOffScreen) {
+    deepSleep();
+  }
+}
 
 uint16_t HalDisplay::getDisplayWidth() const { return DISPLAY_WIDTH; }
 

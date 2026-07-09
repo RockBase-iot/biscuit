@@ -80,3 +80,14 @@
 - Hid the device UI orientation setting and EPUB reader rotate-screen menu item on NM-EPD-420 because the board now uses
   a fixed landscape reader layout.
 - Static verification only; no PlatformIO build/test was run because `.CLAUDE.md` forbids build commands in this repo.
+
+## 2026-07-09 NM Reader Grayscale Corruption
+
+- Investigated the attached normal-then-corrupt TXT photos and serial log. The corrupt screen appears after the normal BW
+  page display and aligns with `Stored BW buffer` / grayscale anti-aliasing work, while low-power entry is logged later.
+- Disabled reader text anti-aliasing on NM-EPD-420 through `ReaderUtils`, so TXT and EPUB render only the stable BW page
+  path on this board.
+- Changed the NM display HAL `displayGrayBuffer()` to skip sending X4 grayscale overlay buffers to the GxEPD2 1-bit
+  framebuffer path, keeping the already displayed BW page instead.
+- Hid the Text Anti-Aliasing device setting on NM-EPD-420 because the hardware path is currently unsupported.
+- Static verification only; no PlatformIO build/test was run because `.CLAUDE.md` forbids build commands in this repo.

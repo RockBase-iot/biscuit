@@ -42,6 +42,14 @@ inline void restoreDefaultOrientation(GfxRenderer& renderer) {
 #endif
 }
 
+inline bool textAntiAliasingEnabled() {
+#if BOARD_NM_EPD_420
+  return false;
+#else
+  return SETTINGS.textAntiAliasing;
+#endif
+}
+
 struct PageTurnResult {
   bool prev;
   bool next;

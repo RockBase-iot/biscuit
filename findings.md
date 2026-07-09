@@ -50,6 +50,10 @@
 - `esp_task_wdt_reset()` logs `task not found` when called from a task that is not subscribed to the ESP task watchdog.
   Yielding with `vTaskDelay(1)` is the safer servicing mechanism here because the observed watchdog pressure is caused by
   starving the subscribed idle task, not by the render task needing to reset its own watchdog entry.
+- NM-EPD-420 should not use the X4 grayscale/text anti-aliasing display path. The reader log shows the page displays
+  normally first, then `Stored BW buffer` / `displayGrayBuffer` activity happens a few seconds later; the attached photo
+  changes from normal black-on-white text to a dark dotted/inverted screen, matching a grayscale overlay buffer being
+  sent through NM's 1-bit GxEPD2 framebuffer path rather than a real grayscale LUT.
 
 ## Compatibility Analysis
 
