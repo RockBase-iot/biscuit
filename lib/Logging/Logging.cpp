@@ -1,5 +1,8 @@
 #include "Logging.h"
 
+#include <cstdarg>
+#include <cstdio>
+#include <cstring>
 #include <string>
 
 #define MAX_ENTRY_LEN 256
@@ -112,3 +115,27 @@ void clearLastLogs() {
   logHead = 0;
   rtcLogMagic = LOG_RTC_MAGIC;
 }
+
+MySerialImpl MySerialImpl::instance;
+
+size_t MySerialImpl::printf(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  char buf[MAX_ENTRY_LEN];
+  const int len = vsnprintf(buf, sizeof(buf), format, args);
+  va_end(args);
+
+  if (len <= 0) {
+    return 0;
+  }
+
+  buf[sizeof(buf) - 1] = '\0';
+  addToLogRingBuffer(buf);
+  return logSerial.write(reinterpret_cast<const uint8_t*>(buf), strnlen(buf, sizeof(buf)));
+}
+
+size_t MySerialImpl::write(uint8_t b) { return logSerial.write(b); }
+
+size_t MySerialImpl::write(const uint8_t* buffer, size_t size) { return logSerial.write(buffer, size); }
+
+void MySerialImpl::flush() { logSerial.flush(); }

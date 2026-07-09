@@ -1,0 +1,10 @@
+{
+  "name": "hal",
+  "version": "1.0.0",
+  "build": {
+    "srcFilter": [
+      "+<*.cpp>",
+      "+<nm_epd_420/*.cpp>"
+    ]
+  }
+}
