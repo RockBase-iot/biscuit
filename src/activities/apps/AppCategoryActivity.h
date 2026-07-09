@@ -40,6 +40,8 @@ class AppCategoryActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
+  void openSelectedEntry(int count);
+
   const char* title;
   std::vector<AppEntry> entries;
   bool requiresDisclaimer;

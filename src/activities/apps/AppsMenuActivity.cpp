@@ -299,7 +299,11 @@ void AppsMenuActivity::loop() {
   // Left/Right (front buttons) move between columns
   // Up/Down (side volume buttons) move between rows
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)
+#if BOARD_NM_EPD_420
+      && !mappedInput.wasReleased(MappedInputManager::Button::Confirm)
+#endif
+  ) {
     int col = getCol();
     int row = getRow();
     col++;
@@ -525,7 +529,7 @@ void AppsMenuActivity::render(RenderLock&&) {
     RadarHomeStatus status { radioBuf, sysBuf, static_cast<int>(batteryPercent) };
     RadarHomeRenderer::draw(renderer, kRadarNodes, selectorIndex, status);
 #if BOARD_NM_EPD_420
-    GUI.drawButtonHints(renderer, "USER <", "BOOT >", "U hold ^", "B hold v");
+    GUI.drawButtonHints(renderer, "U hold ^", "USER <", "BOOT >", "B hold v");
 #else
     const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), "<", ">");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -542,7 +546,7 @@ void AppsMenuActivity::render(RenderLock&&) {
 
   // === STATUS INFO ROW (below separator, above tiles) ===
 #if BOARD_NM_EPD_420
-  constexpr int statusRowY = 37;
+  constexpr int statusRowY = 34;
 #else
   constexpr int statusRowY = 42;
 #endif
@@ -559,10 +563,10 @@ void AppsMenuActivity::render(RenderLock&&) {
 
   // === TILE GRID ===
 #if BOARD_NM_EPD_420
-  constexpr int buttonHintsH = 30;
+  constexpr int buttonHintsH = 36;
   constexpr int sidePad = 8;
   constexpr int tileGap = 4;
-  constexpr int gridTop = 58;
+  constexpr int gridTop = 50;
 #else
   constexpr int statusBarH = 40;
   constexpr int buttonHintsH = 40;
@@ -586,7 +590,7 @@ void AppsMenuActivity::render(RenderLock&&) {
 
   // === BUTTON HINTS ===
 #if BOARD_NM_EPD_420
-  GUI.drawButtonHints(renderer, "USER <", "BOOT >", "U hold ^", "B hold v");
+  GUI.drawButtonHints(renderer, "U hold ^", "USER <", "BOOT >", "B hold v");
 #else
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "<", ">");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -637,9 +641,9 @@ void AppsMenuActivity::drawStatusBar() const {
   const auto pageWidth = renderer.getScreenWidth();
 #if BOARD_NM_EPD_420
   constexpr int pad = 10;
-  constexpr int brandY = 6;
-  constexpr int statY = 10;
-  constexpr int separatorY = 32;
+  constexpr int brandY = 4;
+  constexpr int statY = 8;
+  constexpr int separatorY = 29;
 #else
   constexpr int pad = 14;
   constexpr int brandY = 10;
@@ -688,7 +692,7 @@ void AppsMenuActivity::drawTile(int index, int x, int y, int w, int h, bool sele
   }
 
 #if BOARD_NM_EPD_420
-  constexpr int pad = 6;
+  constexpr int pad = 5;
   constexpr int titleFont = UI_10_FONT_ID;
 #else
   constexpr int pad = 10;
@@ -713,6 +717,56 @@ void AppsMenuActivity::drawTile(int index, int x, int y, int w, int h, bool sele
   }
 
   const int textWidth = w - pad * 2;
+#if BOARD_NM_EPD_420
+  const auto title = renderer.truncatedText(titleFont, name, textWidth, EpdFontFamily::BOLD);
+  const int titleW = renderer.getTextWidth(titleFont, title.c_str(), EpdFontFamily::BOLD);
+  renderer.drawText(titleFont, x + (w - titleW) / 2, y + pad, title.c_str(), !selected, EpdFontFamily::BOLD);
+
+  if (appCount > 0) {
+    char countStr[12];
+    snprintf(countStr, sizeof(countStr), "%d apps", appCount);
+    const auto countText = renderer.truncatedText(SMALL_FONT_ID, countStr, textWidth);
+    const int countW = renderer.getTextWidth(SMALL_FONT_ID, countText.c_str());
+    renderer.drawText(SMALL_FONT_ID, x + (w - countW) / 2, y + h - pad - renderer.getLineHeight(SMALL_FONT_ID),
+                      countText.c_str(), !selected);
+  }
+
+  if (selected) {
+    char statusStr[48] = "";
+    switch (index) {
+      case 0:
+        snprintf(statusStr, sizeof(statusStr), wifiConnected ? "WiFi ready" : "WiFi off");
+        break;
+      case 1:
+        snprintf(statusStr, sizeof(statusStr), wifiConnected ? "WiFi conn" : "WiFi off");
+        break;
+      case 2:
+        snprintf(statusStr, sizeof(statusStr), "RF %s", wifiConnected ? "active" : "silent");
+        break;
+      case 4:
+        snprintf(statusStr, sizeof(statusStr), "%luK free", (unsigned long)(freeHeap / 1024));
+        break;
+      case 5:
+      case 6:
+        if (lastUsedName[index][0] != '\0') {
+          snprintf(statusStr, sizeof(statusStr), "%s", lastUsedName[index]);
+        }
+        break;
+      default:
+        break;
+    }
+
+    if (statusStr[0] != '\0') {
+      const int statusY = y + (h - renderer.getLineHeight(SMALL_FONT_ID)) / 2 + 3;
+      const auto selectedStatus = renderer.truncatedText(SMALL_FONT_ID, statusStr, textWidth);
+      const int statusW = renderer.getTextWidth(SMALL_FONT_ID, selectedStatus.c_str());
+      renderer.drawText(SMALL_FONT_ID, x + (w - statusW) / 2, statusY, selectedStatus.c_str(), !selected);
+    }
+  }
+
+  return;
+#endif
+
   const auto title = renderer.truncatedText(titleFont, name, textWidth, EpdFontFamily::BOLD);
   renderer.drawText(titleFont, x + pad, nameY, title.c_str(), !selected, EpdFontFamily::BOLD);
   nameY += renderer.getLineHeight(titleFont) + 1;

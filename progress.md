@@ -26,3 +26,14 @@
 - Investigated the NM-EPD-420 physical display abnormality and reboot log. The GFX outside-range pattern matched the renderer's portrait transform on a 400x300 panel, where logical x values over 299 become negative physical y values.
 - Adjusted NM-EPD-420 UI orientation and layout: default non-reader screens now return to native landscape, AppsMenu uses a compact 4x2 grid, tile/status text is truncated to fit, theme button hints use a compact 4-slot bottom bar, side hints are suppressed on NM, Lyra/Noir list icons use 24px on NM, and the NM PlatformIO environment no longer defines PSRAM after the attached log showed PSRAM initialization failure.
 - Ran `git diff --check` only; no PlatformIO build/test was run because `.CLAUDE.md` forbids build commands in this repo.
+
+## 2026-07-09
+
+- Fine-tuned the NM-EPD-420 bottom button hint row for the physical bezel: moved the compact hint bar upward, reserved more AppsMenu bottom space, and changed the NM AppsMenu labels to `U hold ^ | USER < | BOOT > | B hold v`.
+- Preserved the requested two-button semantics while resolving menu conflicts: BOOT short still emits confirm/next, USER short still emits back/previous, BOOT long emits down/page-forward, and USER long emits up/page-back; AppsMenu and category menus now prioritize confirm before consuming the same BOOT short event as navigation.
+- Simplified the NM-EPD-420 AppsMenu tile rendering to avoid text overlap: compact 4x2 tiles now draw centered title, centered count, and a single selected-status line instead of title + subtitle + badge + count + status.
+- Lowered the compact NM bottom button hint bar while keeping a small bottom safety margin.
+- Investigated the attached `spinlock_acquire spinlock.h:84 (lock)` reset log. Found ESP32-S3-incompatible `taskENTER_CRITICAL(nullptr)` calls in `ActivityManager`; replaced them with a real `portMUX_TYPE` guard for the render-wait state.
+- Reduced render/log contention on NM-EPD-420 by disabling GxEPD2 diagnostic serial output and skipping periodic MEM log prints while the render lock is busy.
+- Checked the current NM display drivers for fast partial refresh: UC8179 has no partial/fast partial support, and GDEY042Z98 has partial RAM addressing but still performs full-screen refresh; no button-click partial refresh path was enabled.
+- Static verification only; no PlatformIO build/test was run because `.CLAUDE.md` forbids build commands in this repo.

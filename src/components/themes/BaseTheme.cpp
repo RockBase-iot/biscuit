@@ -196,8 +196,10 @@ bool BaseTheme::drawNmButtonHintsIfNeeded(GfxRenderer& renderer, const char* btn
   const int pageHeight = renderer.getScreenHeight();
   constexpr int sidePad = 8;
   constexpr int gap = 4;
-  constexpr int height = 26;
-  const int y = pageHeight - height + 6;
+  constexpr int height = 24;
+  constexpr int bottomMargin = 8;
+  const int top = pageHeight - bottomMargin - height;
+  const int y = top + 6;
   const int slotWidth = (pageWidth - sidePad * 2 - gap * 3) / 4;
 
   for (int i = 0; i < 4; ++i) {
@@ -207,8 +209,8 @@ bool BaseTheme::drawNmButtonHintsIfNeeded(GfxRenderer& renderer, const char* btn
     }
 
     const int x = sidePad + i * (slotWidth + gap);
-    renderer.fillRect(x, pageHeight - height - 1, slotWidth, height, inverted);
-    renderer.drawRect(x, pageHeight - height - 1, slotWidth, height, !inverted);
+    renderer.fillRect(x, top, slotWidth, height, inverted);
+    renderer.drawRect(x, top, slotWidth, height, !inverted);
 
     std::string text = bracketed ? (std::string("[") + label + "]") : std::string(label);
     text = renderer.truncatedText(SMALL_FONT_ID, text.c_str(), slotWidth - 6);

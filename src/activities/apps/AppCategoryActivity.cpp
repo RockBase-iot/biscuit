@@ -30,6 +30,28 @@ void AppCategoryActivity::onEnter() {
   requestUpdate();
 }
 
+void AppCategoryActivity::openSelectedEntry(int count) {
+  if (selectorIndex >= count || entries[selectorIndex].isSectionHeader) {
+    return;
+  }
+
+  // Save last-used activity name
+  if (categoryIndex >= 0) {
+    char path[40];
+    snprintf(path, sizeof(path), "/biscuit/lastused_%d.txt", categoryIndex);
+    FsFile file;
+    if (Storage.openFileForWrite("APPS", path, file)) {
+      file.write((const uint8_t*)entries[selectorIndex].nameStrId, strlen(entries[selectorIndex].nameStrId));
+      file.close();
+    }
+  }
+
+  auto app = entries[selectorIndex].factory(renderer, mappedInput);
+  if (app) {
+    activityManager.pushActivity(std::move(app));
+  }
+}
+
 void AppCategoryActivity::loop() {
   if (disclaimerShown) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
@@ -45,6 +67,13 @@ void AppCategoryActivity::loop() {
   }
 
   const int count = static_cast<int>(entries.size());
+
+#if BOARD_NM_EPD_420
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    openSelectedEntry(count);
+    return;
+  }
+#endif
 
   buttonNavigator.onNext([this, count] {
     int next = ButtonNavigator::nextIndex(selectorIndex, count);
@@ -72,22 +101,7 @@ void AppCategoryActivity::loop() {
   });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    if (selectorIndex < count && !entries[selectorIndex].isSectionHeader) {
-      // Save last-used activity name
-      if (categoryIndex >= 0) {
-        char path[40];
-        snprintf(path, sizeof(path), "/biscuit/lastused_%d.txt", categoryIndex);
-        FsFile file;
-        if (Storage.openFileForWrite("APPS", path, file)) {
-          file.write((const uint8_t*)entries[selectorIndex].nameStrId, strlen(entries[selectorIndex].nameStrId));
-          file.close();
-        }
-      }
-      auto app = entries[selectorIndex].factory(renderer, mappedInput);
-      if (app) {
-        activityManager.pushActivity(std::move(app));
-      }
-    }
+    openSelectedEntry(count);
   }
 
   // Track that Back was physically pressed while this activity is active on screen

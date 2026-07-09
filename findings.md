@@ -30,6 +30,14 @@
   negative physical y values on the 400x300 panel.
 - Theme button hints used fixed X4 portrait button coordinates and temporarily forced portrait orientation; on NM this
   can draw outside the panel even after the main activity layout is made landscape.
+- ESP32-S3 / Arduino 3 / ESP-IDF 5 does not tolerate `taskENTER_CRITICAL(nullptr)`. The attached
+  `spinlock_acquire spinlock.h:84 (lock)` reset after AppsMenu refresh matches the null critical-lock calls in
+  `ActivityManager`; a real `portMUX_TYPE` is required.
+- GxEPD2 diagnostic serial output during display refresh can interleave with project logging. NM should initialize the
+  panel driver with diagnostic baud disabled and avoid periodic MEM logging while the render lock is busy.
+- NM-EPD-420 should not currently use fast partial refresh for button feedback. The local UC8179 driver declares
+  `hasPartialUpdate = false` and `hasFastPartialUpdate = false`; the GxEPD2 SSD1683/GDEY042Z98 driver supports partial
+  RAM window addressing, but its `refresh(x,y,w,h)` still calls full-screen update and `hasFastPartialUpdate = false`.
 
 ## Compatibility Analysis
 

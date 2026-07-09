@@ -46,6 +46,8 @@ Primary blockers:
 | Storage HAL | complete | Added conditional SdFat/HSPI implementation for NM SD card. |
 | Power/system | complete | Added NM ADC battery path, simple deep sleep wake, and ESP32-S3-safe panic wrapper behavior. |
 | Landscape UI pass | complete | Set NM non-reader UI to native landscape, changed AppsMenu to 4x2 compact layout, and added NM-safe compact button hints. |
+| NM two-button UX pass | complete | Bottom hints now match USER/BOOT short/hold behavior, and menu screens prioritize BOOT short confirm over same-event navigation. |
+| NM render/reset stabilization | complete | Replaced ESP32-S3-incompatible null FreeRTOS critical locks and reduced serial/log activity during display refresh. |
 | Verification | blocked | Repo instructions prohibit PlatformIO build/test; only static checks were run. |
 
 ## Constraints
@@ -63,3 +65,4 @@ Primary blockers:
 | Native mapper test cannot start | `pio test -e native -f test_two_button_input_mapper` | PlatformIO reaches build stage but host lacks `gcc`/`g++` in PATH. |
 | COM12 upload blocked before compile | `pio run -e nm_epd_420 --target upload --upload-port COM12` | Long user-profile PlatformIO path failed unpacking; short `PLATFORMIO_CORE_DIR` fixed that, but repeated GitHub package downloads ended as corrupt/bad zip before project compilation. |
 | NM AppsMenu display overflow | Attached boot log showed many GFX outside-range messages after entering AppsMenu | Root cause was portrait coordinate rotation plus fixed X4-style button hint coordinates on a 400x300 panel; NM UI now defaults to native landscape and uses compact hints. |
+| NM reset after AppsMenu refresh | Attached boot log ended in `spinlock_acquire spinlock.h:84 (lock)` | Root cause matched `taskENTER_CRITICAL(nullptr)` / `taskEXIT_CRITICAL(nullptr)` on ESP32-S3; replaced with a real `portMUX_TYPE` and reduced render-time serial logging. |

@@ -15,7 +15,7 @@ HalDisplay display;
 namespace {
 template <typename Display>
 void initActiveDisplay(Display& epd, bool fastFullUpdate) {
-  epd.init(115200, true, 2, false);
+  epd.init(0, true, 2, false);
   epd.epd2.selectFastFullUpdate(fastFullUpdate);
   epd.setRotation(0);
 }

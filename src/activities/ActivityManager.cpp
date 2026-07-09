@@ -14,6 +14,10 @@
 #include "settings/SettingsActivity.h"
 #include "util/FullScreenMessageActivity.h"
 
+namespace {
+portMUX_TYPE waitingTaskMux = portMUX_INITIALIZER_UNLOCKED;
+}
+
 void ActivityManager::begin() {
   xTaskCreate(&renderTaskTrampoline, "ActivityManagerRender",
               8192,              // Stack size
@@ -41,10 +45,10 @@ void ActivityManager::renderTaskLoop() {
     }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
     TaskHandle_t waiter = nullptr;
-    taskENTER_CRITICAL(nullptr);
+    taskENTER_CRITICAL(&waitingTaskMux);
     waiter = waitingTaskHandle;
     waitingTaskHandle = nullptr;
-    taskEXIT_CRITICAL(nullptr);
+    taskEXIT_CRITICAL(&waitingTaskMux);
     if (waiter) {
       xTaskNotify(waiter, 1, eIncrement);
     }
@@ -241,7 +245,7 @@ void ActivityManager::requestUpdateAndWait() {
   }
 
   // Atomic section to perform checks
-  taskENTER_CRITICAL(nullptr);
+  taskENTER_CRITICAL(&waitingTaskMux);
   auto currTaskHandler = xTaskGetCurrentTaskHandle();
   auto mutexHolder = xSemaphoreGetMutexHolder(renderingMutex);
   bool isRenderTask = (currTaskHandler == renderTaskHandle);
@@ -250,7 +254,7 @@ void ActivityManager::requestUpdateAndWait() {
   if (!alreadyWaiting && !isRenderTask && !holdingRenderLock) {
     waitingTaskHandle = currTaskHandler;
   }
-  taskEXIT_CRITICAL(nullptr);
+  taskEXIT_CRITICAL(&waitingTaskMux);
 
   // Render task cannot call requestUpdateAndWait() or it will cause a deadlock
   assert(!isRenderTask && "Render task cannot call requestUpdateAndWait()");
