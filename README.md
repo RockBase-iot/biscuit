@@ -28,6 +28,22 @@ The 4.26" e-ink display is readable in direct sunlight, retains its image withou
 
 ### NM-EPD-420 Port
 
+### Hardware
+
+| Spec | Value |
+|------|-------|
+| SoC | ESP32-S3 (Xtensa, 240MHz) |
+| RAM | 380KB SRAM (8MB PSRAM) |
+| Flash | 16MB |
+| Display | 4.2" 400×300 e-ink, 3-color (black, white, red) |
+| Input | 2 buttons (USER (left), BOOT (right)) |
+| WiFi | 2.4GHz 802.11 b/g/n |
+| BLE | 5.0 (shared radio with WiFi) |
+| Storage | MicroSD (FAT32) |
+| Port | USB-C (serial + power) |
+
+### Button
+
 The NM-EPD-420 port targets the board's two built-in buttons instead of the X4 seven-button layout. The compact control model is:
 
 | Action | Meaning |
@@ -55,6 +71,8 @@ The home screen is a dashboard of eight tiles. Everything lives under one of the
 | **Reader** | Ebooks, OPDS, reading stats |
 | **Settings** | Preferences, file transfer, system management |
 
+![NM-EPD-420 dashboard](./docs/images/nm-epd-420/nm-epd-420-menu.png)
+
 ### Recon — scan and monitor (passive only)
 
 ![Recon tools](./docs/images/recon.jpeg)
@@ -81,6 +99,8 @@ All apps in Recon are read-only — they listen but never transmit.
 | Deauth Detector | Monitor for deauthentication frame spikes |
 
 ### Offense — active wireless testing
+
+![Offense tools](./docs/images/nm-epd-420/nm-epd-420-biscuit-Offense.png)
 
 Offense opens a 2×2 sub-menu grouped into four phases. A disclaimer must be acknowledged before first use.
 
@@ -128,6 +148,8 @@ Offense opens a 2×2 sub-menu grouped into four phases. A disclaimer must be ack
 | Wipe Captures | Delete all captured data |
 
 ### Defense — stealth and protect
+
+![Defense tools](./docs/images/nm-epd-420/nm-epd-420-biscuit-Defense.png)
 
 Ghost Mode is the headline entry — it rotates MAC, kills radios, and cleans up state in one action (replacing the old standalone MAC Changer and RF Silence apps).
 
@@ -221,6 +243,8 @@ A single tile that merges the old Network section with crypto, productivity, tra
 Casino (slots, blackjack, roulette, coin flip, higher/lower, loot box), Minesweeper, Sudoku, Chess (with bot), Snake, Tetris, Maze, Dice Roller, Game of Life, Voronoi, Matrix Rain.
 
 ### Reader
+
+![Reader](./docs/images/nm-epd-420/nm-epd-420-biscuit-Reader.png)
 
 | App | What it does |
 |-----|-------------|
