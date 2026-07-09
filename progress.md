@@ -32,6 +32,7 @@
 - Fine-tuned the NM-EPD-420 bottom button hint row for the physical bezel: moved the compact hint bar upward, reserved more AppsMenu bottom space, and changed the NM AppsMenu labels to `U hold < | USER ^ | BOOT v | B hold >`.
 - Reworked the requested two-button semantics so short USER/BOOT presses navigate naturally and long USER/BOOT presses provide back/confirm. Short presses also keep previous/next aliases for screens that use horizontal navigation.
 - Fixed NM-EPD-420 deep sleep wake setup by filtering wake GPIOs through `esp_sleep_is_valid_wakeup_gpio()` before enabling EXT1 wake. This keeps BOOT/GPIO0 wake armed and avoids USER/GPIO45 invalidating the wake configuration.
+- Adjusted the NM-EPD-420 AppsMenu layout from device photo feedback: moved the status row up, moved the tile grid down, centered compact hint text better, and made short USER/BOOT navigation move linearly through the 8 dashboard tiles.
 - Simplified the NM-EPD-420 AppsMenu tile rendering to avoid text overlap: compact 4x2 tiles now draw centered title, centered count, and a single selected-status line instead of title + subtitle + badge + count + status.
 - Lowered the compact NM bottom button hint bar while keeping a small bottom safety margin.
 - Investigated the attached `spinlock_acquire spinlock.h:84 (lock)` reset log. Found ESP32-S3-incompatible `taskENTER_CRITICAL(nullptr)` calls in `ActivityManager`; replaced them with a real `portMUX_TYPE` guard for the render-wait state.

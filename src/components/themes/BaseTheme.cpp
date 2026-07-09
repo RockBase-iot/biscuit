@@ -199,7 +199,7 @@ bool BaseTheme::drawNmButtonHintsIfNeeded(GfxRenderer& renderer, const char* btn
   constexpr int height = 24;
   constexpr int bottomMargin = 8;
   const int top = pageHeight - bottomMargin - height;
-  const int y = top + 6;
+  const int y = top + 3;
   const int slotWidth = (pageWidth - sidePad * 2 - gap * 3) / 4;
 
   for (int i = 0; i < 4; ++i) {

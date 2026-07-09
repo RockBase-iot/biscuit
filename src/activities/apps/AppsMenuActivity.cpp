@@ -299,11 +299,18 @@ void AppsMenuActivity::loop() {
   // Left/Right (front buttons) move between columns
   // Up/Down (side volume buttons) move between rows
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)
 #if BOARD_NM_EPD_420
-      && !mappedInput.wasReleased(MappedInputManager::Button::Confirm)
-#endif
-  ) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
+      mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+    selectorIndex = (selectorIndex + 1) % ITEM_COUNT;
+    requestUpdate();
+  } else if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
+             mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+    selectorIndex = (selectorIndex + ITEM_COUNT - 1) % ITEM_COUNT;
+    requestUpdate();
+  }
+#else
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
     int col = getCol();
     int row = getRow();
     col++;
@@ -349,6 +356,8 @@ void AppsMenuActivity::loop() {
   }
 
   // Periodic info refresh — only redraw if visible values changed
+#endif
+
   if (millis() - lastInfoRefresh > INFO_REFRESH_MS) {
     uint32_t oldHeap = freeHeap;
     bool oldWifi = wifiConnected;
@@ -546,7 +555,7 @@ void AppsMenuActivity::render(RenderLock&&) {
 
   // === STATUS INFO ROW (below separator, above tiles) ===
 #if BOARD_NM_EPD_420
-  constexpr int statusRowY = 34;
+  constexpr int statusRowY = 31;
 #else
   constexpr int statusRowY = 42;
 #endif
@@ -566,7 +575,7 @@ void AppsMenuActivity::render(RenderLock&&) {
   constexpr int buttonHintsH = 36;
   constexpr int sidePad = 8;
   constexpr int tileGap = 4;
-  constexpr int gridTop = 50;
+  constexpr int gridTop = 58;
 #else
   constexpr int statusBarH = 40;
   constexpr int buttonHintsH = 40;
