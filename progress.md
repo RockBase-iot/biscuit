@@ -45,3 +45,16 @@
 - Added `docs/nm-epd-420-controls.md` as the canonical NM-EPD-420 USER/BOOT operation guide.
 - Updated `USER_GUIDE.md` with the NM two-button layout, dashboard/list notes, and reader-mode notes.
 - Updated `README.md` with a short NM-EPD-420 port controls table and a link to the full control guide.
+
+## 2026-07-09 SD Card Diagnostics
+
+- Investigated NM-EPD-420 SD access showing `No files found` with no SD-related serial logs.
+- Compared the local `NM-Display-420` SD test: it parks LoRa NSS high before SD access and initializes the shared
+  peripheral SPI bus without assigning CS to `SPI.begin()`.
+- Updated NM GPIO idle handling to keep LoRa NSS high, so the LoRa device does not contend with SD on the shared
+  SCK/MOSI/MISO bus.
+- Updated NM `HalStorage::begin()` to log SD pin/frequency settings, mount failure error/data, card/volume info, and
+  root-directory readiness; the NM SD bus now begins without passing CS and uses `SHARED_SPI`.
+- Added diagnostics in `FileBrowserActivity` and `SdFileBrowserActivity` so empty screens report whether the directory
+  could not be opened or whether all entries were hidden/unsupported after filtering.
+- No PlatformIO build/test was run because `.CLAUDE.md` forbids build commands in this repo.

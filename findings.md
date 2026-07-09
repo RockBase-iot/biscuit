@@ -38,6 +38,10 @@
 - NM-EPD-420 should not currently use fast partial refresh for button feedback. The local UC8179 driver declares
   `hasPartialUpdate = false` and `hasFastPartialUpdate = false`; the GxEPD2 SSD1683/GDEY042Z98 driver supports partial
   RAM window addressing, but its `refresh(x,y,w,h)` still calls full-screen update and `hasFastPartialUpdate = false`.
+- NM-EPD-420 SD and LoRa share the peripheral SPI bus. The local `NM-Display-420` SD test parks LoRa NSS high before SD
+  access, initializes the SPI bus without passing CS to `SPI.begin()`, and lets the SD driver own CS. Biscuit's NM port
+  previously left LoRa NSS high-Z and had no diagnostics for mount/root/list failures, which explains a `No files found`
+  UI with no SD-related serial evidence.
 
 ## Compatibility Analysis
 

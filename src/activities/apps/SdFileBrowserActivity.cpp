@@ -26,8 +26,21 @@ void SdFileBrowserActivity::loadDirectory() {
   entries.clear();
   selectorIndex = 0;
 
+  if (!Storage.ready()) {
+    LOG_ERR("SdBrowser", "SD storage is not ready");
+    return;
+  }
+
   HalFile dir = Storage.open(currentPath.c_str());
-  if (!dir) return;
+  if (!dir) {
+    LOG_ERR("SdBrowser", "Failed to open directory: %s", currentPath.c_str());
+    return;
+  }
+  if (!dir.isDirectory()) {
+    LOG_ERR("SdBrowser", "Path is not a directory: %s", currentPath.c_str());
+    dir.close();
+    return;
+  }
 
   // Add ".." if not root
   if (currentPath != "/") {
@@ -35,13 +48,17 @@ void SdFileBrowserActivity::loadDirectory() {
   }
 
   HalFile entry;
+  int scannedCount = 0;
+  int hiddenCount = 0;
   while ((entry = dir.openNextFile()) && entries.size() < 200) {
     char nameBuf[256];
     entry.getName(nameBuf, sizeof(nameBuf));
     std::string name = nameBuf;
+    scannedCount++;
 
     // Skip hidden files and system dirs
     if (name.empty() || name[0] == '.' || name == "System Volume Information") {
+      hiddenCount++;
       entry.close();
       continue;
     }
@@ -62,6 +79,13 @@ void SdFileBrowserActivity::loadDirectory() {
     if (a.isDir != b.isDir) return a.isDir > b.isDir;
     return a.name < b.name;
   });
+  if (entries.empty() || (currentPath != "/" && entries.size() == 1 && entries[0].name == "..")) {
+    LOG_INF("SdBrowser", "Directory empty after filtering: path=%s scanned=%d hidden=%d", currentPath.c_str(),
+            scannedCount, hiddenCount);
+  } else {
+    LOG_DBG("SdBrowser", "Loaded directory: path=%s shown=%u scanned=%d", currentPath.c_str(),
+            static_cast<unsigned>(entries.size()), scannedCount);
+  }
 }
 
 void SdFileBrowserActivity::navigateInto(int index) {

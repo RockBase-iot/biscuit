@@ -25,6 +25,7 @@ HalStorage HalStorage::instance;
 namespace {
 SPIClass nmSdSpi(HSPI);
 SdFs nmSd;
+constexpr uint8_t kNmSdSckMhz = 20;
 
 String readAll(FsFile& file) {
   String content;
@@ -32,6 +33,26 @@ String readAll(FsFile& file) {
     content += static_cast<char>(file.read());
   }
   return content;
+}
+
+void parkNmSharedSpiDevices() {
+  pinMode(NM_LORA_EN, OUTPUT);
+  digitalWrite(NM_LORA_EN, LOW);
+  pinMode(NM_LORA_NSS, OUTPUT);
+  digitalWrite(NM_LORA_NSS, HIGH);
+  pinMode(NM_SD_CS, OUTPUT);
+  digitalWrite(NM_SD_CS, HIGH);
+}
+
+void logNmSdVolumeInfo() {
+  auto* card = nmSd.card();
+  const uint8_t cardType = card ? card->type() : 0;
+  const uint64_t sectorCount = card ? static_cast<uint64_t>(card->sectorCount()) : 0;
+  const uint8_t fatType = nmSd.vol() ? nmSd.vol()->fatType() : 0;
+  const uint32_t clusterCount = nmSd.vol() ? static_cast<uint32_t>(nmSd.vol()->clusterCount()) : 0;
+  LOG_INF("SD", "NM SD mounted: cardType=%u sectors=%llu fat=%u clusters=%lu", static_cast<unsigned>(cardType),
+          static_cast<unsigned long long>(sectorCount), static_cast<unsigned>(fatType),
+          static_cast<unsigned long>(clusterCount));
 }
 }  // namespace
 #endif
@@ -45,10 +66,28 @@ HalStorage::HalStorage() {
 
 bool HalStorage::begin() {
 #if BOARD_NM_EPD_420
-  pinMode(NM_SD_CS, OUTPUT);
-  digitalWrite(NM_SD_CS, HIGH);
-  nmSdSpi.begin(NM_SD_SCK, NM_SD_MISO, NM_SD_MOSI, NM_SD_CS);
-  initialized = nmSd.begin(SdSpiConfig(NM_SD_CS, DEDICATED_SPI, SD_SCK_MHZ(20), &nmSdSpi));
+  parkNmSharedSpiDevices();
+  LOG_INF("SD", "NM SD init: sck=%u miso=%u mosi=%u cs=%u loraNss=%u freq=%uMHz", NM_SD_SCK, NM_SD_MISO,
+          NM_SD_MOSI, NM_SD_CS, NM_LORA_NSS, static_cast<unsigned>(kNmSdSckMhz));
+  nmSdSpi.begin(NM_SD_SCK, NM_SD_MISO, NM_SD_MOSI);
+  initialized = nmSd.begin(SdSpiConfig(NM_SD_CS, SHARED_SPI, SD_SCK_MHZ(kNmSdSckMhz), &nmSdSpi));
+  if (!initialized) {
+    LOG_ERR("SD", "NM SD init failed: error=0x%02x data=0x%02x", static_cast<unsigned>(nmSd.sdErrorCode()),
+            static_cast<unsigned>(nmSd.sdErrorData()));
+    return false;
+  }
+
+  logNmSdVolumeInfo();
+  FsFile root = nmSd.open("/");
+  if (!root) {
+    LOG_ERR("SD", "NM SD mounted but root open failed");
+  } else if (!root.isDirectory()) {
+    LOG_ERR("SD", "NM SD root is not a directory");
+    root.close();
+  } else {
+    LOG_INF("SD", "NM SD root directory ready");
+    root.close();
+  }
   return initialized;
 #else
   return SDCard.begin();
@@ -79,8 +118,18 @@ std::vector<String> HalStorage::listFiles(const char* path, int maxFiles) {
 #if BOARD_NM_EPD_420
   StorageLock lock;
   std::vector<String> files;
+  if (!initialized) {
+    LOG_ERR("SD", "listFiles(%s) before SD init", path ? path : "(null)");
+    return files;
+  }
   FsFile dir = nmSd.open(path);
-  if (!dir || !dir.isDirectory()) {
+  if (!dir) {
+    LOG_ERR("SD", "listFiles(%s) open failed", path ? path : "(null)");
+    return files;
+  }
+  if (!dir.isDirectory()) {
+    LOG_ERR("SD", "listFiles(%s) is not a directory", path ? path : "(null)");
+    dir.close();
     return files;
   }
 
@@ -92,6 +141,7 @@ std::vector<String> HalStorage::listFiles(const char* path, int maxFiles) {
     file.close();
   }
   dir.close();
+  LOG_DBG("SD", "listFiles(%s) -> %u entries", path ? path : "(null)", static_cast<unsigned>(files.size()));
   return files;
 #else
   HAL_STORAGE_WRAPPED_CALL(listFiles, path, maxFiles);

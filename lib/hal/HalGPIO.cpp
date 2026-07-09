@@ -154,7 +154,8 @@ void configureNmPeripheralIdlePins() {
   pinMode(NM_PA_CTRL, OUTPUT);
   digitalWrite(NM_PA_CTRL, HIGH);
 
-  pinMode(NM_LORA_NSS, INPUT);
+  pinMode(NM_LORA_NSS, OUTPUT);
+  digitalWrite(NM_LORA_NSS, HIGH);
   pinMode(NM_LORA_SCK, INPUT);
   pinMode(NM_LORA_MOSI, INPUT);
   pinMode(NM_LORA_MISO, INPUT);

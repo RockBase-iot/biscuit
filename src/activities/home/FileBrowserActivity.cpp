@@ -75,6 +75,7 @@ void FileBrowserActivity::loadFiles() {
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
+    LOG_ERR("FileBrowser", "Failed to open directory: %s", basepath.c_str());
     if (root) root.close();
     return;
   }
@@ -82,9 +83,14 @@ void FileBrowserActivity::loadFiles() {
   root.rewindDirectory();
 
   char name[500];
+  int scannedCount = 0;
+  int hiddenCount = 0;
+  int unsupportedCount = 0;
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(name, sizeof(name));
+    scannedCount++;
     if ((!SETTINGS.showHiddenFiles && name[0] == '.') || strcmp(name, "System Volume Information") == 0) {
+      hiddenCount++;
       file.close();
       continue;
     }
@@ -97,12 +103,21 @@ void FileBrowserActivity::loadFiles() {
           FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
           FsHelpers::hasBmpExtension(filename)) {
         files.emplace_back(filename);
+      } else {
+        unsupportedCount++;
       }
     }
     file.close();
   }
   root.close();
   sortFileList(files);
+  if (files.empty()) {
+    LOG_INF("FileBrowser", "Directory empty after filtering: path=%s scanned=%d hidden=%d unsupported=%d",
+            basepath.c_str(), scannedCount, hiddenCount, unsupportedCount);
+  } else {
+    LOG_DBG("FileBrowser", "Loaded directory: path=%s shown=%u scanned=%d", basepath.c_str(),
+            static_cast<unsigned>(files.size()), scannedCount);
+  }
 }
 
 void FileBrowserActivity::onEnter() {
