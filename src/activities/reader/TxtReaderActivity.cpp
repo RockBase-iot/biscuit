@@ -7,7 +7,6 @@
 #include <I18n.h>
 #include <Serialization.h>
 #include <Utf8.h>
-#include <esp_task_wdt.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -55,7 +54,6 @@ void serviceLongOperation(uint32_t& lastServiceMs, bool force = false) {
     return;
   }
 
-  esp_task_wdt_reset();
   vTaskDelay(1);
   lastServiceMs = millis();
 }
@@ -144,8 +142,7 @@ void TxtReaderActivity::onEnter() {
 void TxtReaderActivity::onExit() {
   Activity::onExit();
 
-  // Reset orientation back to portrait for the rest of the UI
-  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  ReaderUtils::restoreDefaultOrientation(renderer);
 
   pageOffsets.clear();
   currentPageLines.clear();

@@ -69,3 +69,14 @@
 - Added timed watchdog/CPU servicing during TXT page-index building and page loading so long SD reads, width measurements,
   and wrapping loops yield to other FreeRTOS tasks.
 - Static verification only; no PlatformIO build/test was run because `.CLAUDE.md` forbids build commands in this repo.
+
+## 2026-07-09 TXT Reader Retry Fixes
+
+- Investigated the follow-up log where `INDEXING` appeared portrait and `esp_task_wdt_reset()` printed `task not found`.
+- Removed the direct `esp_task_wdt_reset()` call from TXT indexing because the render task is not subscribed to the task
+  watchdog; retained timed `vTaskDelay(1)` servicing so the idle task can run.
+- Forced NM-EPD-420 reader orientation through `ReaderUtils` to native landscape for TXT and EPUB content, including the
+  indexing popup and EPUB reflow after menu actions.
+- Hid the device UI orientation setting and EPUB reader rotate-screen menu item on NM-EPD-420 because the board now uses
+  a fixed landscape reader layout.
+- Static verification only; no PlatformIO build/test was run because `.CLAUDE.md` forbids build commands in this repo.

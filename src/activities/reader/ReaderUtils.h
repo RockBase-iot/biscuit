@@ -11,6 +11,10 @@ namespace ReaderUtils {
 constexpr unsigned long GO_HOME_MS = 1000;
 
 inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
+#if BOARD_NM_EPD_420
+  (void)orientation;
+  renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
+#else
   switch (orientation) {
     case CrossPointSettings::ORIENTATION::PORTRAIT:
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -27,6 +31,15 @@ inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
     default:
       break;
   }
+#endif
+}
+
+inline void restoreDefaultOrientation(GfxRenderer& renderer) {
+#if BOARD_NM_EPD_420
+  renderer.setOrientation(GfxRenderer::Orientation::LandscapeCounterClockwise);
+#else
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+#endif
 }
 
 struct PageTurnResult {

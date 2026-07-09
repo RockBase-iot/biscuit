@@ -45,6 +45,11 @@
 - TXT reader indexing runs from the render task on first open. For Chinese TXT files with long no-space lines, the old
   wrap routine repeatedly measured progressively shorter substrings and could keep CPU0 busy long enough to trip the
   task watchdog while building the page index.
+- On NM-EPD-420, TXT/EPUB reader activities must not follow the saved X4-style portrait reading orientation. The attached
+  retry log showed `Viewport: 284x364`, proving the reader was still portrait while the rest of the NM UI is landscape.
+- `esp_task_wdt_reset()` logs `task not found` when called from a task that is not subscribed to the ESP task watchdog.
+  Yielding with `vTaskDelay(1)` is the safer servicing mechanism here because the observed watchdog pressure is caused by
+  starving the subscribed idle task, not by the render task needing to reset its own watchdog entry.
 
 ## Compatibility Analysis
 
