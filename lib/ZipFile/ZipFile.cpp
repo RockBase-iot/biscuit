@@ -5,6 +5,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cstring>
 
 struct ZipInflateCtx {
   InflateReader reader;  // Must be first — callback casts uzlib_uncomp* to ZipInflateCtx*
@@ -17,6 +18,18 @@ struct ZipInflateCtx {
 namespace {
 constexpr uint16_t ZIP_METHOD_STORED = 0;
 constexpr uint16_t ZIP_METHOD_DEFLATED = 8;
+constexpr uint32_t ZIP_EOCD_SIGNATURE = 0x06054b50;
+constexpr size_t ZIP_EOCD_MIN_SIZE = 22;
+constexpr size_t ZIP_MAX_COMMENT_SIZE = 0xFFFF;
+constexpr size_t ZIP_EOCD_SEARCH_MAX = ZIP_EOCD_MIN_SIZE + ZIP_MAX_COMMENT_SIZE;
+constexpr size_t ZIP_EOCD_SCAN_CHUNK = 1024;
+
+uint16_t readLe16(const uint8_t* p) { return static_cast<uint16_t>(p[0] | (p[1] << 8)); }
+
+uint32_t readLe32(const uint8_t* p) {
+  return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) | (static_cast<uint32_t>(p[2]) << 16) |
+         (static_cast<uint32_t>(p[3]) << 24);
+}
 
 int zipReadCallback(uzlib_uncomp* uncomp) {
   auto* ctx = reinterpret_cast<ZipInflateCtx*>(uncomp);
@@ -229,7 +242,7 @@ bool ZipFile::loadZipDetails() {
   }
 
   const size_t fileSize = file.size();
-  if (fileSize < 22) {
+  if (fileSize < ZIP_EOCD_MIN_SIZE) {
     LOG_ERR("ZIP", "File too small to be a valid zip");
     if (!wasOpen) {
       close();
@@ -237,34 +250,70 @@ bool ZipFile::loadZipDetails() {
     return false;  // Minimum EOCD size is 22 bytes
   }
 
-  // We scan the last 1KB (or the whole file if smaller) for the EOCD signature
-  // 0x06054b50 is stored as 0x50, 0x4b, 0x05, 0x06 in little-endian
-  const int scanRange = fileSize > 1024 ? 1024 : fileSize;
-  const auto buffer = static_cast<uint8_t*>(malloc(scanRange));
-  if (!buffer) {
-    LOG_ERR("ZIP", "Failed to allocate memory for EOCD scan buffer");
+  // EOCD may be followed by a ZIP comment of up to 65535 bytes.
+  const size_t scanRange = std::min(fileSize, ZIP_EOCD_SEARCH_MAX);
+  const size_t searchStart = fileSize - scanRange;
+  size_t chunkEnd = fileSize;
+  size_t foundOffset = 0;
+  bool found = false;
+
+  uint8_t buffer[ZIP_EOCD_SCAN_CHUNK + 3];
+  uint8_t carry[3] = {0, 0, 0};
+  size_t carryLen = 0;
+
+  while (chunkEnd > searchStart && !found) {
+    size_t chunkStart = chunkEnd > ZIP_EOCD_SCAN_CHUNK ? chunkEnd - ZIP_EOCD_SCAN_CHUNK : searchStart;
+    if (chunkStart < searchStart) {
+      chunkStart = searchStart;
+    }
+
+    const size_t chunkLen = chunkEnd - chunkStart;
+    file.seek(chunkStart);
+    const size_t bytesRead = file.read(buffer, chunkLen);
+    if (bytesRead != chunkLen) {
+      LOG_ERR("ZIP", "Failed to read EOCD scan chunk");
+      if (!wasOpen) {
+        close();
+      }
+      return false;
+    }
+
+    if (carryLen > 0) {
+      memcpy(buffer + bytesRead, carry, carryLen);
+    }
+
+    const size_t totalLen = bytesRead + carryLen;
+    const size_t lastStart = totalLen >= sizeof(uint32_t) ? std::min(bytesRead, totalLen - sizeof(uint32_t) + 1) : 0;
+    for (size_t i = lastStart; i > 0; i--) {
+      const size_t pos = i - 1;
+      const size_t absoluteOffset = chunkStart + pos;
+      if (absoluteOffset > fileSize - ZIP_EOCD_MIN_SIZE) {
+        continue;
+      }
+      if (readLe32(buffer + pos) == ZIP_EOCD_SIGNATURE) {
+        foundOffset = absoluteOffset;
+        found = true;
+        break;
+      }
+    }
+
+    carryLen = std::min<size_t>(sizeof(carry), bytesRead);
+    memcpy(carry, buffer, carryLen);
+    chunkEnd = chunkStart;
+  }
+
+  if (!found) {
+    LOG_ERR("ZIP", "EOCD signature not found in zip file (scanned %u bytes)", static_cast<unsigned>(scanRange));
     if (!wasOpen) {
       close();
     }
     return false;
   }
 
-  file.seek(fileSize - scanRange);
-  file.read(buffer, scanRange);
-
-  // Scan backwards for the signature
-  int foundOffset = -1;
-  for (int i = scanRange - 22; i >= 0; i--) {
-    constexpr uint32_t signature = 0x06054b50;
-    if (*reinterpret_cast<uint32_t*>(&buffer[i]) == signature) {
-      foundOffset = i;
-      break;
-    }
-  }
-
-  if (foundOffset == -1) {
-    LOG_ERR("ZIP", "EOCD signature not found in zip file");
-    free(buffer);
+  uint8_t eocd[ZIP_EOCD_MIN_SIZE];
+  file.seek(foundOffset);
+  if (file.read(eocd, sizeof(eocd)) != sizeof(eocd)) {
+    LOG_ERR("ZIP", "Failed to read EOCD record");
     if (!wasOpen) {
       close();
     }
@@ -275,11 +324,10 @@ bool ZipFile::loadZipDetails() {
   // Relative positions within EOCD:
   // Offset 10: Total number of entries (2 bytes)
   // Offset 16: Offset of start of central directory with respect to the starting disk number (4 bytes)
-  zipDetails.totalEntries = *reinterpret_cast<uint16_t*>(&buffer[foundOffset + 10]);
-  zipDetails.centralDirOffset = *reinterpret_cast<uint32_t*>(&buffer[foundOffset + 16]);
+  zipDetails.totalEntries = readLe16(eocd + 10);
+  zipDetails.centralDirOffset = readLe32(eocd + 16);
   zipDetails.isSet = true;
 
-  free(buffer);
   if (!wasOpen) {
     close();
   }
