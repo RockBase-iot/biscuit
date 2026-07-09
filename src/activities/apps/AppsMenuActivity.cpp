@@ -718,9 +718,9 @@ void AppsMenuActivity::drawTile(int index, int x, int y, int w, int h, bool sele
 
   const int textWidth = w - pad * 2;
 #if BOARD_NM_EPD_420
-  const auto title = renderer.truncatedText(titleFont, name, textWidth, EpdFontFamily::BOLD);
-  const int titleW = renderer.getTextWidth(titleFont, title.c_str(), EpdFontFamily::BOLD);
-  renderer.drawText(titleFont, x + (w - titleW) / 2, y + pad, title.c_str(), !selected, EpdFontFamily::BOLD);
+  const auto nmTitle = renderer.truncatedText(titleFont, name, textWidth, EpdFontFamily::BOLD);
+  const int titleW = renderer.getTextWidth(titleFont, nmTitle.c_str(), EpdFontFamily::BOLD);
+  renderer.drawText(titleFont, x + (w - titleW) / 2, y + pad, nmTitle.c_str(), !selected, EpdFontFamily::BOLD);
 
   if (appCount > 0) {
     char countStr[12];
