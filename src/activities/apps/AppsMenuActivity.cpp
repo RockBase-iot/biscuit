@@ -529,7 +529,7 @@ void AppsMenuActivity::render(RenderLock&&) {
     RadarHomeStatus status { radioBuf, sysBuf, static_cast<int>(batteryPercent) };
     RadarHomeRenderer::draw(renderer, kRadarNodes, selectorIndex, status);
 #if BOARD_NM_EPD_420
-    GUI.drawButtonHints(renderer, "U hold ^", "USER <", "BOOT >", "B hold v");
+    GUI.drawButtonHints(renderer, "U hold <", "USER ^", "BOOT v", "B hold >");
 #else
     const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), "<", ">");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
@@ -590,7 +590,7 @@ void AppsMenuActivity::render(RenderLock&&) {
 
   // === BUTTON HINTS ===
 #if BOARD_NM_EPD_420
-  GUI.drawButtonHints(renderer, "U hold ^", "USER <", "BOOT >", "B hold v");
+  GUI.drawButtonHints(renderer, "U hold <", "USER ^", "BOOT v", "B hold >");
 #else
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "<", ">");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

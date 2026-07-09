@@ -44,9 +44,9 @@ Primary blockers:
 | Display HAL | complete | Added conditional GxEPD2 backend with 400x300 1-bit framebuffer and local UC8179 driver. |
 | Two-button input | complete | Added `TwoButtonInputMapper` and conditional `HalGPIO` integration. |
 | Storage HAL | complete | Added conditional SdFat/HSPI implementation for NM SD card. |
-| Power/system | complete | Added NM ADC battery path, simple deep sleep wake, and ESP32-S3-safe panic wrapper behavior. |
+| Power/system | complete | Added NM ADC battery path, ESP32-S3-safe panic wrapper behavior, and deep sleep wake setup that filters unsupported GPIOs. |
 | Landscape UI pass | complete | Set NM non-reader UI to native landscape, changed AppsMenu to 4x2 compact layout, and added NM-safe compact button hints. |
-| NM two-button UX pass | complete | Bottom hints now match USER/BOOT short/hold behavior, and menu screens prioritize BOOT short confirm over same-event navigation. |
+| NM two-button UX pass | complete | Bottom hints now match short USER/BOOT navigation and long USER/BOOT back/confirm behavior. |
 | NM render/reset stabilization | complete | Replaced ESP32-S3-incompatible null FreeRTOS critical locks and reduced serial/log activity during display refresh. |
 | NM controls documentation | complete | Added `docs/nm-epd-420-controls.md` and linked the USER/BOOT operation model from user-facing docs. |
 | Verification | blocked | Repo instructions prohibit PlatformIO build/test; only static checks were run. |

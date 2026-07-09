@@ -134,24 +134,22 @@ class TwoButtonInputMapper {
   void emitUserRelease(uint32_t nowMs) {
     (void)nowMs;
     if (user.releasedDurationMs >= LONG_PRESS_MS) {
-      emitClick(Button::Up);
-      emitClick(Button::PageBack);
+      emitClick(Button::Back);
       return;
     }
-    emitClick(Button::Back);
     emitClick(Button::Up);
     emitClick(Button::Left);
+    emitClick(Button::PageBack);
   }
 
   void emitBootRelease(uint32_t nowMs) {
     (void)nowMs;
     if (boot.releasedDurationMs >= LONG_PRESS_MS) {
-      emitClick(Button::Down);
-      emitClick(Button::PageForward);
+      emitClick(Button::Confirm);
       return;
     }
-    emitClick(Button::Confirm);
     emitClick(Button::Down);
     emitClick(Button::Right);
+    emitClick(Button::PageForward);
   }
 };

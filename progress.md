@@ -13,7 +13,7 @@
 - Added `env:nm_epd_420` to `platformio.ini`.
 - Added NM-EPD-420 pin definitions, UC8179 display driver files, conditional display HAL, conditional SdFat storage HAL, conditional two-button GPIO/input path, battery ADC handling, and ESP32-S3-safe panic wrapper behavior.
 - Added native unit test source for `TwoButtonInputMapper`, but did not run it because project instructions forbid `pio test`.
-- Updated two-button mapping for NM-EPD-420 board structure: BOOT short emits confirm/next cluster, USER short emits back/previous cluster, BOOT long emits down/page-forward, USER long emits up/page-back.
+- Updated two-button mapping for NM-EPD-420 board structure: BOOT short emits down/next/page-forward, USER short emits up/previous/page-back, BOOT long emits confirm/open, USER long emits back.
 - Tried `pio test -e native -f test_two_button_input_mapper`; it cannot build because `gcc`/`g++` are not available in PATH.
 - Tried COM12 upload with `pio run -e nm_epd_420 --target upload --upload-port COM12`; using a short `PLATFORMIO_CORE_DIR` fixed the original Windows path unpack issue, but package downloads repeatedly produced bad/corrupt zip errors before project compilation started.
 - Fixed NM compile errors reported by owner: removed invalid `GxEPD2_GFX*` polymorphism from `HalDisplay`, switched NM deep-sleep wake to EXT1 low-level wake, guarded ESP32-C3/RISC-V private panic includes out of NM builds, and added `CROSSPOINT_VERSION` to `env:nm_epd_420`. Did not run compilation per owner request.
@@ -29,8 +29,9 @@
 
 ## 2026-07-09
 
-- Fine-tuned the NM-EPD-420 bottom button hint row for the physical bezel: moved the compact hint bar upward, reserved more AppsMenu bottom space, and changed the NM AppsMenu labels to `U hold ^ | USER < | BOOT > | B hold v`.
-- Preserved the requested two-button semantics while resolving menu conflicts: BOOT short still emits confirm/next, USER short still emits back/previous, BOOT long emits down/page-forward, and USER long emits up/page-back; AppsMenu and category menus now prioritize confirm before consuming the same BOOT short event as navigation.
+- Fine-tuned the NM-EPD-420 bottom button hint row for the physical bezel: moved the compact hint bar upward, reserved more AppsMenu bottom space, and changed the NM AppsMenu labels to `U hold < | USER ^ | BOOT v | B hold >`.
+- Reworked the requested two-button semantics so short USER/BOOT presses navigate naturally and long USER/BOOT presses provide back/confirm. Short presses also keep previous/next aliases for screens that use horizontal navigation.
+- Fixed NM-EPD-420 deep sleep wake setup by filtering wake GPIOs through `esp_sleep_is_valid_wakeup_gpio()` before enabling EXT1 wake. This keeps BOOT/GPIO0 wake armed and avoids USER/GPIO45 invalidating the wake configuration.
 - Simplified the NM-EPD-420 AppsMenu tile rendering to avoid text overlap: compact 4x2 tiles now draw centered title, centered count, and a single selected-status line instead of title + subtitle + badge + count + status.
 - Lowered the compact NM bottom button hint bar while keeping a small bottom safety margin.
 - Investigated the attached `spinlock_acquire spinlock.h:84 (lock)` reset log. Found ESP32-S3-incompatible `taskENTER_CRITICAL(nullptr)` calls in `ActivityManager`; replaced them with a real `portMUX_TYPE` guard for the render-wait state.

@@ -91,7 +91,8 @@ unsigned long MappedInputManager::getHeldTime() const { return gpio.getHeldTime(
 MappedInputManager::Labels MappedInputManager::mapLabels(const char* back, const char* confirm, const char* previous,
                                                          const char* next) const {
 #if BOARD_NM_EPD_420
-  return {back, confirm, previous, next};
+  return {back && back[0] ? "U hold <" : "", confirm && confirm[0] ? "B hold >" : "",
+          previous && previous[0] ? "USER ^" : "", next && next[0] ? "BOOT v" : ""};
 #else
   // Build the label order based on the configured hardware mapping.
   auto labelForHardware = [&](uint8_t hw) -> const char* {

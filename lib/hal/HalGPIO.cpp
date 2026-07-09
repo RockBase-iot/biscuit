@@ -187,6 +187,31 @@ void configureNmPeripheralSleepPins() {
   gpio_hold_en(static_cast<gpio_num_t>(NM_PA_CTRL));
   gpio_deep_sleep_hold_en();
 }
+
+void configureNmButtonSleepPins() {
+  pinMode(NM_USER_BTN, INPUT_PULLUP);
+  pinMode(NM_BOOT_BTN, INPUT_PULLUP);
+  gpio_pullup_en(static_cast<gpio_num_t>(NM_USER_BTN));
+  gpio_pullup_en(static_cast<gpio_num_t>(NM_BOOT_BTN));
+  gpio_pulldown_dis(static_cast<gpio_num_t>(NM_USER_BTN));
+  gpio_pulldown_dis(static_cast<gpio_num_t>(NM_BOOT_BTN));
+}
+
+uint64_t getNmDeepSleepWakeMask() {
+  constexpr uint8_t kWakeButtonPins[] = {NM_BOOT_BTN, NM_USER_BTN};
+  uint64_t wakeMask = 0;
+
+  for (const uint8_t pin : kWakeButtonPins) {
+    const auto gpioNum = static_cast<gpio_num_t>(pin);
+    if (esp_sleep_is_valid_wakeup_gpio(gpioNum)) {
+      wakeMask |= (1ULL << pin);
+    } else {
+      LOG_INF("GPIO", "NM deep sleep wake unsupported on GPIO%u", pin);
+    }
+  }
+
+  return wakeMask;
+}
 #endif
 
 constexpr char HW_NAMESPACE[] = "cphw";
@@ -387,8 +412,21 @@ void HalGPIO::startDeepSleep() {
     update();
   }
   configureNmPeripheralSleepPins();
+  configureNmButtonSleepPins();
   Serial.flush();
-  esp_sleep_enable_ext1_wakeup((1ULL << NM_USER_BTN) | (1ULL << NM_BOOT_BTN), ESP_EXT1_WAKEUP_ANY_LOW);
+
+  const uint64_t wakeMask = getNmDeepSleepWakeMask();
+  if (wakeMask == 0) {
+    LOG_ERR("GPIO", "No valid NM deep sleep wake pins; sleep cancelled");
+    return;
+  }
+
+  const esp_err_t wakeErr = esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_LOW);
+  if (wakeErr != ESP_OK) {
+    LOG_ERR("GPIO", "NM deep sleep wake setup failed: %d", static_cast<int>(wakeErr));
+    return;
+  }
+
   esp_deep_sleep_start();
 #else
   // Ensure that the power button has been released to avoid immediately turning back on if you're holding it

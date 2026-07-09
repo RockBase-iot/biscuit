@@ -32,10 +32,10 @@ The NM-EPD-420 port targets the board's two built-in buttons instead of the X4 s
 
 | Action | Meaning |
 | --- | --- |
-| USER short press | Back / previous item |
-| BOOT short press | Confirm / next item |
-| USER hold | Up / previous page |
-| BOOT hold | Down / next page |
+| USER short press | Up / previous item / previous page |
+| BOOT short press | Down / next item / next page |
+| USER hold | Back |
+| BOOT hold | Confirm / open |
 | USER + BOOT hold | Logical Power action |
 
 See [NM-EPD-420 Controls](./docs/nm-epd-420-controls.md) for the full button mapping, timing thresholds, and on-screen hint labels.

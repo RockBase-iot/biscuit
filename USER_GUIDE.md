@@ -50,13 +50,13 @@ The NM-EPD-420 port uses the board's two built-in buttons:
 
 | Action | Meaning |
 | --- | --- |
-| **USER** short press | Back / previous item |
-| **BOOT** short press | Confirm / next item |
-| Hold **USER** | Up / previous page |
-| Hold **BOOT** | Down / next page |
+| **USER** short press | Up / previous item / previous page |
+| **BOOT** short press | Down / next item / next page |
+| Hold **USER** | Back |
+| Hold **BOOT** | Confirm / open |
 | Hold **USER + BOOT** | Logical Power action |
 
-NM-EPD-420 screens may show the compact hint row `U hold ^ | USER < | BOOT > | B hold v`. See [NM-EPD-420 Controls](./docs/nm-epd-420-controls.md) for the full mapping and timing details.
+NM-EPD-420 screens may show the compact hint row `U hold < | USER ^ | BOOT v | B hold >`. See [NM-EPD-420 Controls](./docs/nm-epd-420-controls.md) for the full mapping, timing details, and deep sleep wake note.
 
 ### Taking a Screenshot
 When the Power Button and Volume Down button are pressed at the same time, it will take a screenshot and save it in the folder `screenshots/`.
@@ -94,7 +94,7 @@ A status bar at the top shows battery, heap, uptime, and WiFi status.
 
 Navigate tiles with Left/Right (front buttons) and Up/Down (side buttons). Press Confirm to enter a category.
 
-On NM-EPD-420, use **USER** for previous/back and **BOOT** for next/confirm. Hold **USER** or **BOOT** to move by row or page where supported.
+On NM-EPD-420, short press **USER** for previous/up and short press **BOOT** for next/down. Hold **BOOT** to enter the selected tile.
 
 ### 3.2 Reading Mode
 
@@ -108,7 +108,7 @@ The Browse Files screen acts as a file and folder browser.
 * **Open Selection:** Press **Confirm** to open a folder or read a selected book. 
 * **Delete Files:** Hold and release **Confirm** to delete the selected file. You will be given an option to either confirm or cancel deletion. Folder deletion is not supported.
 
-On NM-EPD-420, use **USER** short press for back/previous and **BOOT** short press for open/next. Hold **USER** or **BOOT** for page-level movement where supported.
+On NM-EPD-420, short press **USER** or **BOOT** to move through the list. Hold **BOOT** to open the selected item and hold **USER** to go back.
 
 ### 3.4 Recent Books Screen
 
@@ -377,7 +377,7 @@ The role of the volume (side) buttons can be swapped in the **[Controls Settings
 
 If the **Short Power Button Click** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
 
-On NM-EPD-420, **USER** maps to the previous-page side and **BOOT** maps to the next-page side. Hold **USER** or **BOOT** for page or chapter-level movement, depending on the reader settings.
+On NM-EPD-420, short press **USER** for the previous page and short press **BOOT** for the next page. Hold **USER** to leave the reader flow and hold **BOOT** for confirm/menu actions where supported.
 
 ### Chapter Navigation
 * **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button briefly, then release.
