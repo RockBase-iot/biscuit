@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
 
 #include "activities/Activity.h"

@@ -90,7 +90,7 @@ void ScanActivity::startBlePhase() {
     scan->setInterval(100);
     scan->setWindow(100);
     scan->clearResults();
-    scan->start(static_cast<uint32_t>(BLE_PHASE_MS / 1000), false);
+    scan->start(static_cast<uint32_t>(BLE_PHASE_MS / 1000), nullptr, false);
 
     phase = BLE_SCAN;
     phaseStartMs = millis();
@@ -132,8 +132,9 @@ static void harvestBleResults() {
         BLEAdvertisedDevice d = results->getDevice(i);
         Target t;
         t.type = TargetType::BLE;
-        const uint8_t* addr = d.getAddress().getNative();
-        memcpy(t.mac, addr, 6);
+        BLEAddress bleAddress = d.getAddress();
+        const auto* addr = bleAddress.getNative();
+        memcpy(t.mac, *addr, sizeof(t.mac));
         if (d.haveName()) {
             strncpy(t.name, d.getName().c_str(), sizeof(t.name) - 1);
             t.name[sizeof(t.name) - 1] = '\0';
@@ -208,10 +209,8 @@ void ScanActivity::loop() {
                 startBlePhase();
             }
         } else if (phase == BLE_SCAN) {
-            // Phase transition: BLE -> WiFi (either time-based or scan finished)
-            BLEScan* scan = BLEDevice::getScan();
-            const bool bleDone = (now - phaseStartMs >= BLE_PHASE_MS) || !scan->isScanning();
-            if (bleDone) {
+            // Phase transition: BLE -> WiFi
+            if (now - phaseStartMs >= BLE_PHASE_MS) {
                 harvestBleResults();
                 RADIO.shutdown();
                 startWifiPhase();

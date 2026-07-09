@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"

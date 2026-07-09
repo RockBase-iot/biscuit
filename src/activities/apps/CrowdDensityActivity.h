@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <esp_wifi.h>
+#include <freertos/FreeRTOS.h>
 #include <freertos/portmacro.h>
 
 #include "activities/Activity.h"
