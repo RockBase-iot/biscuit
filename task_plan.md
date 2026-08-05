@@ -40,8 +40,9 @@ Primary blockers:
 | Item | Status | Notes |
 | --- | --- | --- |
 | PlatformIO NM environment | complete | Added `env:nm_epd_420` with ESP32-S3, PSRAM, GxEPD2, and SdFat dependencies. |
+| PlatformIO NM BW variant | complete | Added `env:nm_epd_420_bw` for the GYE042A87 black/white panel while keeping pins, storage, input, partition, and UI settings aligned with `env:nm_epd_420`. |
 | Board pin map | complete | Added `NmEpd420Pins.h` for EPD, SD, USER/BOOT, and battery ADC pins. |
-| Display HAL | complete | Added conditional GxEPD2 backend with 400x300 1-bit framebuffer and local UC8179 driver. |
+| Display HAL | complete | Added conditional GxEPD2 backend with 400x300 1-bit framebuffer, local UC8179 support for the 3-color build, and GYE042A87 BW support for `nm_epd_420_bw`. |
 | Two-button input | complete | Added `TwoButtonInputMapper` and conditional `HalGPIO` integration. |
 | Storage HAL | complete | Added conditional SdFat/HSPI implementation for NM SD card. |
 | Power/system | complete | Added NM ADC battery path, ESP32-S3-safe panic wrapper behavior, and deep sleep wake setup that filters unsupported GPIOs. |

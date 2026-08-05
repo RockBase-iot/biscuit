@@ -41,15 +41,20 @@ HalDisplay::~HalDisplay() {}
 
 void HalDisplay::begin() {
   SPI.begin(NM_EPD_SCK, NM_EPD_MISO, NM_EPD_MOSI, NM_EPD_CS);
+#if NM_EPD_420_BW
+  initActiveDisplay(bw, true);
+#else
   selectPanelDriver();
   if (activeIsUc8179) {
     initActiveDisplay(uc8179, false);
   } else {
     initActiveDisplay(ssd1683, true);
   }
+#endif
   clearScreen();
 }
 
+#if !NM_EPD_420_BW
 void HalDisplay::selectPanelDriver() {
   activeIsUc8179 = detectUc8179Panel();
 }
@@ -74,6 +79,7 @@ bool HalDisplay::detectUc8179Panel() {
 
   return lowCount < 12;
 }
+#endif
 
 void HalDisplay::clearScreen(uint8_t color) const { memset(frameBuffer, color, BUFFER_SIZE); }
 
@@ -125,21 +131,29 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
     txBuffer[i] = static_cast<uint8_t>(~frameBuffer[i]);
   }
 
+#if NM_EPD_420_BW
+  flushBitmapToDisplay(bw, txBuffer, turnOffScreen);
+#else
   if (activeIsUc8179) {
     flushBitmapToDisplay(uc8179, txBuffer, turnOffScreen);
   } else {
     flushBitmapToDisplay(ssd1683, txBuffer, turnOffScreen);
   }
+#endif
 }
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) { displayBuffer(mode, turnOffScreen); }
 
 void HalDisplay::deepSleep() {
+#if NM_EPD_420_BW
+  bw.hibernate();
+#else
   if (activeIsUc8179) {
     uc8179.hibernate();
   } else {
     ssd1683.hibernate();
   }
+#endif
 }
 
 uint8_t* HalDisplay::getFrameBuffer() const { return frameBuffer; }

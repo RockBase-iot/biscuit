@@ -11,8 +11,8 @@
 ## Target Hardware
 
 - NM-EPD-420 factory-test firmware targets ESP32-S3 with 16 MB flash and PSRAM, Arduino framework, PlatformIO board `lilygo-t-display-s3`, and `huge_app.csv`.
-- Display is a 4.2 inch 400x300 GDEY042Z98 3-color B/W/R e-paper panel on SPI with pins SCK=2, MOSI=1, CS=46, DC=4, RST=5, BUSY=6, MISO unused.
-- Display stack uses GxEPD2 3-color classes plus a local `GxEPD2_420c_NM_UC8179` panel implementation; auto-detect switches between SSD1683-style and UC8179-style behavior.
+- Display is a 4.2 inch 400x300 panel on SPI with pins SCK=2, MOSI=1, CS=46, DC=4, RST=5, BUSY=6, MISO unused. The standard NM-EPD-420 build uses the GDEY042Z98 3-color panel; the `nm_epd_420_bw` variant uses the GYE042A87 black/white panel from the latest reference firmware.
+- Display stack uses GxEPD2 3-color classes plus a local `GxEPD2_420c_NM_UC8179` panel implementation for `nm_epd_420`; `nm_epd_420_bw` compiles the GxEPD2 BW GYE042A87 driver instead and keeps the same board pins/UI behavior.
 - SD card is on a second SPI bus: SCK=9, MOSI=10, MISO=11, CS=7. LoRa shares the same bus using CS=8, RST=12, BUSY=13, DIO1=14, EN=47.
 - Board has only two built-in buttons exposed in the factory firmware: USER on GPIO45 and BOOT on GPIO0, active low.
 - Battery sensing uses enable GPIO43 and ADC GPIO3, divider ratio 2, with sampling/settle parameters defined in target `config.h`.

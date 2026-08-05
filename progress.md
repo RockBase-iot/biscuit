@@ -45,6 +45,7 @@
 - Added `docs/nm-epd-420-controls.md` as the canonical NM-EPD-420 USER/BOOT operation guide.
 - Updated `USER_GUIDE.md` with the NM two-button layout, dashboard/list notes, and reader-mode notes.
 - Updated `README.md` with a short NM-EPD-420 port controls table and a link to the full control guide.
+- Added the `nm_epd_420_bw` build variant for GYE042A87 black/white panels, matching the latest NM-EPD-420 reference firmware while keeping the existing NM board pins, storage, input, partition, and UI settings aligned with `nm_epd_420`.
 
 ## 2026-07-09 SD Card Diagnostics
 

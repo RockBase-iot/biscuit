@@ -35,12 +35,19 @@ The 4.26" e-ink display is readable in direct sunlight, retains its image withou
 | SoC | ESP32-S3 (Xtensa, 240MHz) |
 | RAM | 380KB SRAM (8MB PSRAM) |
 | Flash | 16MB |
-| Display | 4.2" 400×300 e-ink, 3-color (black, white, red) |
+| Display | 4.2" 400×300 e-ink, standard 3-color GDEY042Z98 or BW GYE042A87 |
 | Input | 2 buttons (USER (left), BOOT (right)) |
 | WiFi | 2.4GHz 802.11 b/g/n |
 | BLE | 5.0 (shared radio with WiFi) |
 | Storage | MicroSD (FAT32) |
 | Port | USB-C (serial + power) |
+
+### Build Variants
+
+| Environment | Display panel | Notes |
+| --- | --- | --- |
+| `nm_epd_420` | GDEY042Z98 3-color panel, with the existing UC8179-compatible fallback | Standard NM-EPD-420 port. |
+| `nm_epd_420_bw` | GYE042A87 black/white panel | Same board pins and UI behavior as `nm_epd_420`, but uses the faster BW GxEPD2 driver. |
 
 ### Button
 

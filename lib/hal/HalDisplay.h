@@ -1,13 +1,21 @@
 #pragma once
 #include <Arduino.h>
 #if BOARD_NM_EPD_420
+#ifndef NM_EPD_420_BW
+#define NM_EPD_420_BW 0
+#endif
+#if NM_EPD_420_BW
+#include <GxEPD2_BW.h>
+#include <other/GxEPD2_420_GYE042A87.h>
+#else
 #include <GxEPD2_3C.h>
+#include <gdey3c/GxEPD2_420c_GDEY042Z98.h>
+#include "nm_epd_420/epd_uc8179_420c.h"
+#endif
 #include <GxEPD2_GFX.h>
 #include <SPI.h>
-#include <gdey3c/GxEPD2_420c_GDEY042Z98.h>
 
 #include "NmEpd420Pins.h"
-#include "nm_epd_420/epd_uc8179_420c.h"
 #else
 #include <EInkDisplay.h>
 #endif
@@ -74,12 +82,20 @@ class HalDisplay {
 
  private:
 #if BOARD_NM_EPD_420
-  static constexpr uint16_t EPD_PAGE_HEIGHT = DISPLAY_HEIGHT / 2;
+  static constexpr uint16_t EPD_PAGE_HEIGHT = NM_EPD_420_BW ? DISPLAY_HEIGHT : (DISPLAY_HEIGHT / 2);
+#if NM_EPD_420_BW
+  using BwDisplay = GxEPD2_BW<GxEPD2_420_GYE042A87, EPD_PAGE_HEIGHT>;
+#else
   using Ssd1683Display = GxEPD2_3C<GxEPD2_420c_GDEY042Z98, EPD_PAGE_HEIGHT>;
   using Uc8179Display = GxEPD2_3C<GxEPD2_420c_NM_UC8179, EPD_PAGE_HEIGHT>;
+#endif
 
   mutable uint8_t frameBuffer[BUFFER_SIZE];
   mutable uint8_t txBuffer[BUFFER_SIZE];
+#if NM_EPD_420_BW
+  GxEPD2_420_GYE042A87 bwDriver{NM_EPD_CS, NM_EPD_DC, NM_EPD_RST, NM_EPD_BUSY};
+  BwDisplay bw{bwDriver};
+#else
   GxEPD2_420c_GDEY042Z98 ssd1683Driver{NM_EPD_CS, NM_EPD_DC, NM_EPD_RST, NM_EPD_BUSY};
   GxEPD2_420c_NM_UC8179 uc8179Driver{NM_EPD_CS, NM_EPD_DC, NM_EPD_RST, NM_EPD_BUSY};
   Ssd1683Display ssd1683{ssd1683Driver};
@@ -88,6 +104,7 @@ class HalDisplay {
 
   void selectPanelDriver();
   bool detectUc8179Panel();
+#endif
   void writeBitmapToFramebuffer(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                                 bool transparent, bool fromProgmem) const;
 #else
