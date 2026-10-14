@@ -1,4 +1,4 @@
 [submodule "freeink-sdk"]
 	path = freeink-sdk
-	url = https://github.com/0x1abin/freeink-sdk.git
-	branch = main
+	url = https://github.com/RockBase-iot/freeink-sdk.git
+	branch = nm-epd-420
