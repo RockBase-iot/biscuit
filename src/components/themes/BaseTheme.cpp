@@ -410,6 +410,12 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   } else {
     // X4 layout: Both buttons stacked on right side
     constexpr int topButtonY = 345;
+    // The fixed coordinates target the X4's tall logical screen. On small
+    // panels (e.g. NM-EPD-420's 400x300, 300 logical height) they fall outside
+    // the framebuffer and spam "Outside range" errors — skip the hints there.
+    if (topButtonY + 2 * buttonHeight > renderer.getScreenHeight()) {
+      return;
+    }
     const char* labels[] = {topBtn, bottomBtn};
     const int x = screenWidth - buttonMargin - buttonWidth;
 

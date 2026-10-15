@@ -1,6 +1,7 @@
 #include "KeyboardEntryActivity.h"
 
 #include <BidiUtils.h>
+#include <BoardConfig.h>
 #include <HalGPIO.h>
 #include <I18n.h>
 
@@ -226,6 +227,27 @@ void KeyboardEntryActivity::moveSelectionCol(const int delta) {
   const int cols = layout.rows[selRow].count;
   if (cols <= 0) return;
   selCol = (selCol + delta + cols) % cols;
+}
+
+// Row-major walk across every key: two-button boards (DigitalTwoButton, e.g.
+// NM-EPD-420) have no Left/Right, so their Up/Down step through all keys
+// linearly instead of jumping whole rows.
+void KeyboardEntryActivity::moveSelectionLinear(const int delta) {
+  const fui::KeyboardLayout& layout = currentLayout();
+  int total = 0;
+  for (int r = 0; r < layout.rowCount; r++) total += layout.rows[r].count;
+  if (total <= 0) return;
+  int flat = selCol;
+  for (int r = 0; r < selRow && r < layout.rowCount; r++) flat += layout.rows[r].count;
+  flat = (flat + delta + total) % total;
+  int r = 0;
+  while (r + 1 < layout.rowCount && flat >= layout.rows[r].count) {
+    flat -= layout.rows[r].count;
+    r++;
+  }
+  selRow = r;
+  selCol = flat;
+  clampSelection();
 }
 
 bool KeyboardEntryActivity::syncSelectionToValue(const int16_t value) {
@@ -672,23 +694,43 @@ void KeyboardEntryActivity::loop() {
     }
   }
 
-  if (!cursorMode && mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+  // Two-button boards (DigitalTwoButton, e.g. NM-EPD-420) have no Left/Right:
+  // Up/Down walk the key grid linearly instead of jumping whole rows, and in
+  // cursor mode they move the text cursor (long Up enters, long Up again or
+  // Back exits).
+  const bool twoButtonNav = BoardConfig::ACTIVE.inputStyle == BoardConfig::InputStyle::DigitalTwoButton;
+
+  if ((!cursorMode || twoButtonNav) && mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     upHeld = true;
     upLongHandled = false;
   }
 
   if (upHeld && !upLongHandled && mappedInput.isPressed(MappedInputManager::Button::Up) &&
       mappedInput.getHeldTime() > LONG_PRESS_MS) {
-    cursorMode = true;
+    if (twoButtonNav && cursorMode) {
+      cursorMode = false;
+      hintVisible = false;
+    } else {
+      cursorMode = true;
+      hintVisible = true;
+      hintShowTime = millis();
+    }
     upLongHandled = true;
-    hintVisible = true;
-    hintShowTime = millis();
     requestUpdate();
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
-    if (upHeld && !upLongHandled && !cursorMode) {
-      moveSelectionRow(-1);
+    if (twoButtonNav && cursorMode) {
+      if (upHeld && !upLongHandled && cursorPos > 0) {
+        cursorPos = utf8Prev(text, cursorPos);
+        requestUpdate();
+      }
+    } else if (upHeld && !upLongHandled && !cursorMode) {
+      if (twoButtonNav) {
+        moveSelectionLinear(-1);
+      } else {
+        moveSelectionRow(-1);
+      }
       requestUpdate();
     }
     upHeld = false;
@@ -697,7 +739,7 @@ void KeyboardEntryActivity::loop() {
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
     downHeld = true;
-    if (cursorMode) {
+    if (cursorMode && !twoButtonNav) {
       togglePos = false;
       passwordVisible = false;
       cursorMode = false;
@@ -710,8 +752,17 @@ void KeyboardEntryActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    if (downHeld && !downLongHandled && !cursorMode) {
-      moveSelectionRow(1);
+    if (twoButtonNav && cursorMode) {
+      if (downHeld && !downLongHandled && cursorPos < text.length()) {
+        cursorPos = utf8Next(text, cursorPos);
+        requestUpdate();
+      }
+    } else if (downHeld && !downLongHandled && !cursorMode) {
+      if (twoButtonNav) {
+        moveSelectionLinear(1);
+      } else {
+        moveSelectionRow(1);
+      }
       requestUpdate();
     }
     downHeld = false;

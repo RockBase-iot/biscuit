@@ -125,6 +125,7 @@ class KeyboardEntryActivity : public Activity {
   void clampSelection();
   void moveSelectionRow(int delta);
   void moveSelectionCol(int delta);
+  void moveSelectionLinear(int delta);
   bool syncSelectionToValue(int16_t value);
   // Handles one key activation (by stable key id). Returns true when the
   // screen needs a repaint; OK/cancel finish the activity instead.
