@@ -379,13 +379,21 @@ bool ActivityManager::handleMainTabInput() {
     return true;
   }
 
+  // Two-button boards (DigitalTwoButton, e.g. NM-EPD-420) have no physical
+  // Left/Right, so the tab bar would be unreachable. In Tabs focus their two
+  // buttons switch tabs via Up/Down instead; Confirm still enters the content
+  // area, so the Up/Down "enter content" bindings are skipped for them.
+  const bool twoButtonTabs = BoardConfig::ACTIVE.inputStyle == BoardConfig::InputStyle::DigitalTwoButton;
+
   switch (mainTabFocus) {
     case MainTabFocus::Tabs:
-      if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+      if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
+          (twoButtonTabs && mappedInput.wasReleased(MappedInputManager::Button::Up))) {
         goToMainTab(MainTabs::adjacent(currentTab, -1));
         return true;
       }
-      if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+      if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
+          (twoButtonTabs && mappedInput.wasReleased(MappedInputManager::Button::Down))) {
         goToMainTab(MainTabs::adjacent(currentTab, 1));
         return true;
       }
@@ -401,14 +409,14 @@ bool ActivityManager::handleMainTabInput() {
       }
       if (mappedInput.isPressed(MappedInputManager::Button::Confirm)) return true;
 
-      if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
+      if (!twoButtonTabs && mappedInput.wasPressed(MappedInputManager::Button::Down)) {
         mainTabFocus = MainTabFocus::Content;
         mainTabEntryReleasePending = true;
         currentActivity->selectMainTabContentEdge(MainTabContentEdge::First);
         requestUpdate();
         return true;
       }
-      if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
+      if (!twoButtonTabs && mappedInput.wasPressed(MappedInputManager::Button::Up)) {
         mainTabFocus = MainTabFocus::Content;
         mainTabEntryReleasePending = true;
         currentActivity->selectMainTabContentEdge(MainTabContentEdge::Last);
