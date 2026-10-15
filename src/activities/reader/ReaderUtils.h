@@ -57,6 +57,18 @@ inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   }
 }
 
+// Orientation for the non-reader UI (home, menus, popups). Portrait-native
+// boards keep menus in portrait and apply the user's orientation to the
+// reader only. Landscape-native panels (NM-EPD-420: 400x300 RAM) would show
+// every menu sideways that way, so the whole UI follows SETTINGS.orientation.
+inline void applyUiOrientation(GfxRenderer& renderer) {
+#if FREEINK_DEVICE_NM_EPD_420
+  applyOrientation(renderer, SETTINGS.orientation);
+#else
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+#endif
+}
+
 struct PageTurnResult {
   bool prev;
   bool next;

@@ -2440,7 +2440,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   forcedRefreshPending = false;
   const bool cleanImageBasePending = manualRefreshPending || pagesUntilFullRefresh <= 1;
   // Night mode renders crisp B/W; the SDK disables every grayscale display path.
-  const bool grayscaleEnabled = !renderer.isInverted();
+  // NM-EPD-420: the SSD1683 grayscale LUT is still the unvalidated X4 copy
+  // (CrossMuxSsd1677Driver.cpp TODO), so the AA/gray paths render dark,
+  // inverted, overlapping pages on hardware. Force pure 1-bit rendering until
+  // a panel-specific LUT lands; with the every-page clean cadence each turn
+  // then runs the full 0xD7 OTP waveform (HALF maps to it on this config),
+  // matching the vendor demo / GxEPD2 full-erase flow.
+  const bool grayscaleEnabled = !renderer.isInverted() && !FREEINK_DEVICE_NM_EPD_420;
   const bool needsTextGrayscale = grayscaleEnabled && SETTINGS.textAntiAliasing;
   // Images write the BW buffer directly; keep them, backgrounds and faux bold on the existing path.
   const bool use16LevelText = needsTextGrayscale && !pageHasImages && renderer.getGrayscaleLevels() == 16 &&

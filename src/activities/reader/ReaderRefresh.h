@@ -17,6 +17,11 @@ inline HalDisplay::RefreshMode consumeRefreshMode(int& pagesUntilFullRefresh, bo
   // alone, so the base and grey planes go out together as GC16. Ordinary pages stay
   // FAST -> GL16: anti-aliasing preserved, no flash. Vendor firmware cleans the same way
   // every APP_GC16_EVERY = 14 pages.
+  // NM-EPD-420 must stay on HALF: its config maps Half to the full 0xD7 OTP
+  // waveform (plus the GxEPD2-parity 0x1A temperature write), which cleans the
+  // panel, while FULL_REFRESH routes the reader into the grayscale-AA base path
+  // whose LUT is still the unvalidated X4 copy -- on hardware that renders dark,
+  // overlapping pages.
 #if FREEINK_DEVICE_READPICO
   const auto cleanMode = HalDisplay::FULL_REFRESH;
 #else

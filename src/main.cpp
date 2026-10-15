@@ -47,6 +47,7 @@
 #include "activities/settings/TextSettingsActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #endif
+#include "activities/reader/ReaderUtils.h"
 #include "activities/settings/LanguageSelectActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
@@ -826,6 +827,19 @@ void setup() {
   const bool settingsLoaded = SETTINGS.loadFromFile();
 #if FREEINK_DEVICE_READPICO
   if (!settingsLoaded) SETTINGS.readerMenuStyle = CrossPointSettings::READER_MENU_TOOLBAR;
+#endif
+#if FREEINK_DEVICE_NM_EPD_420
+  // The 400x300 panel's RAM-native orientation is landscape, while the settings
+  // default (PORTRAIT) is the X4's phone-style portrait. Default fresh installs
+  // to the panel-native landscape; the user's choice persists once saved.
+  if (!settingsLoaded) SETTINGS.orientation = CrossPointSettings::LANDSCAPE_CCW;
+  // The SSD1683's FAST refresh leaves visible ghosting on this panel, so clean
+  // on every page turn by default (cleanMode is FULL_REFRESH for this board;
+  // see ReaderRefresh.h). The user can relax this in Settings.
+  if (!settingsLoaded) SETTINGS.refreshFrequency = CrossPointSettings::REFRESH_1;
+  // Menus render in the renderer's current orientation; on this landscape-native
+  // panel the whole UI (not just the reader) follows SETTINGS.orientation.
+  ReaderUtils::applyUiOrientation(renderer);
 #endif
   const auto onboardingMode =
       settingsLoaded ? LanguageSelectActivity::Mode::Upgrade : LanguageSelectActivity::Mode::Initial;
