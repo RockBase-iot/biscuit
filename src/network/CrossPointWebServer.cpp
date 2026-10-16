@@ -21,6 +21,7 @@
 #include <base64.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
+#include <qrcode.h>
 #include <wolfssl/wolfcrypt/aes.h>
 #include <wolfssl/wolfcrypt/hash.h>
 #ifndef SIMULATOR
@@ -41,6 +42,8 @@
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
 #include "ProtectedPaths.h"
+#include "util/QrUtils.h"
+#include "ReadingStatsStore.h"
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
@@ -50,12 +53,18 @@ namespace web_zh_cn {
 #include "html/zh-CN/FontsPageHtml.generated.h"
 #include "html/zh-CN/HomePageHtml.generated.h"
 #include "html/zh-CN/SettingsPageHtml.generated.h"
+#include "html/zh-CN/StatsPageHtml.generated.h"
+#include "html/zh-CN/WereadPageHtml.generated.h"
+#include "html/zh-CN/WifiPageHtml.generated.h"
 }  // namespace web_zh_cn
 namespace web_en {
 #include "html/en/FilesPageHtml.generated.h"
 #include "html/en/FontsPageHtml.generated.h"
 #include "html/en/HomePageHtml.generated.h"
 #include "html/en/SettingsPageHtml.generated.h"
+#include "html/en/StatsPageHtml.generated.h"
+#include "html/en/WereadPageHtml.generated.h"
+#include "html/en/WifiPageHtml.generated.h"
 }  // namespace web_en
 #include "WifiPowerSaveGuard.h"
 #include "html/RunnerPageHtml.generated.h"
@@ -122,6 +131,16 @@ struct LocalizedPage {
 LocalizedPage localizedPage(const char* chinese, const size_t chineseSize, const char* english,
                             const size_t englishSize) {
   return useChineseWebUi() ? LocalizedPage{chinese, chineseSize} : LocalizedPage{english, englishSize};
+}
+
+// Locale override: "?lang=zh" / "?lang=en" beats the device UI language, so a
+// phone browser can read either version regardless of the on-device setting.
+LocalizedPage localizedPageFor(WebServer* server, const char* chinese, const size_t chineseSize, const char* english,
+                               const size_t englishSize) {
+  const String lang = server->arg("lang");
+  if (lang == "zh") return LocalizedPage{chinese, chineseSize};
+  if (lang == "en") return LocalizedPage{english, englishSize};
+  return localizedPage(chinese, chineseSize, english, englishSize);
 }
 
 memory::ByteBuffer makeWebBuffer(const size_t size) {
@@ -303,6 +322,30 @@ bool CrossPointWebServer::begin() {
   server->on("/api/wifi", HTTP_GET, [this] { handleGetWifiNetworks(); });
   server->on("/api/wifi", HTTP_POST, [this] { handlePostWifiNetwork(); });
   server->on("/api/wifi/delete", HTTP_POST, [this] { handleDeleteWifiNetwork(); });
+
+  // Browser-driven Wi-Fi provisioning (scan / connect / live state)
+  server->on("/wifi", HTTP_GET, [this] { handleWifiPage(); });
+  server->on("/api/wifi/scan", HTTP_POST, [this] { handleWifiScanStart(); });
+  server->on("/api/wifi/scan", HTTP_GET, [this] { handleWifiScanResults(); });
+  server->on("/api/wifi/connect", HTTP_POST, [this] { handleWifiConnect(); });
+  server->on("/api/wifi/state", HTTP_GET, [this] { handleWifiState(); });
+
+  // Reading statistics page + data
+  server->on("/stats", HTTP_GET, [this] { handleStatsPage(); });
+  server->on("/api/stats", HTTP_GET, [this] { handleStatsData(); });
+
+  // WeChat Reading web entry (status + cached books)
+  server->on("/weread", HTTP_GET, [this] { handleWereadPage(); });
+  server->on("/api/weread/status", HTTP_GET, [this] { handleWereadStatus(); });
+  server->on("/api/weread/disclaimer", HTTP_POST, [this] { handleWereadDisclaimer(); });
+  server->on("/api/weread/login/start", HTTP_POST, [this] { handleWereadLoginStart(); });
+  server->on("/api/weread/login/poll", HTTP_GET, [this] { handleWereadLoginPoll(); });
+  server->on("/api/weread/cancel", HTTP_POST, [this] { handleWereadCancel(); });
+  server->on("/api/weread/bookshelf", HTTP_GET, [this] { handleWereadBookshelf(); });
+  server->on("/api/weread/refresh", HTTP_POST, [this] { handleWereadRefresh(); });
+  server->on("/api/weread/cache", HTTP_POST, [this] { handleWereadCache(); });
+  server->on("/api/weread/cache/status", HTTP_GET, [this] { handleWereadCacheStatus(); });
+  server->on("/api/weread/cache/cancel", HTTP_POST, [this] { handleWereadCacheCancel(); });
 
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
@@ -495,6 +538,20 @@ void CrossPointWebServer::handleClient() {
   // handler returns, so release them now instead of retaining a JSON body.
   releaseRequestArguments(server.get());
 
+  // Drive a background weread download cooperatively. Each step blocks at most
+  // for one HTTP request, so buttons and other web requests are only ever
+  // delayed by a single step instead of the whole download.
+  if (wereadOp && wereadPurpose == WereadPurpose::Cache && wereadOp->active()) {
+    pumpWeread(500);
+    if (!wereadOp->active()) {
+      if (wereadOp->error() == WeReadClient::Error::Ok) {
+        LOG_DBG("WEB", "Weread cache complete: %s", wereadOp->finalPath());
+      } else {
+        LOG_ERR("WEB", "Weread cache failed: %s", wereadErrorName(wereadOp->error()));
+      }
+    }
+  }
+
   // Handle WebSocket events
   if (wsServer) {
     wsServer->loop();
@@ -596,7 +653,7 @@ static bool sendCompressedContent(WebServer* server, const char* contentType, co
 }
 
 void CrossPointWebServer::handleRoot() const {
-  const auto page = localizedPage(web_zh_cn::HomePageHtml, sizeof(web_zh_cn::HomePageHtml), web_en::HomePageHtml,
+  const auto page = localizedPageFor(server.get(), web_zh_cn::HomePageHtml, sizeof(web_zh_cn::HomePageHtml), web_en::HomePageHtml,
                                   sizeof(web_en::HomePageHtml));
   if (sendCompressedContent(server.get(), "text/html", page.data, page.size)) {
     LOG_DBG("WEB", "Served root page");
@@ -753,7 +810,7 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<bool(c
 bool CrossPointWebServer::isEpubFile(const String& filename) const { return FsHelpers::hasEpubExtension(filename); }
 
 void CrossPointWebServer::handleFileList() const {
-  const auto page = localizedPage(web_zh_cn::FilesPageHtml, sizeof(web_zh_cn::FilesPageHtml), web_en::FilesPageHtml,
+  const auto page = localizedPageFor(server.get(), web_zh_cn::FilesPageHtml, sizeof(web_zh_cn::FilesPageHtml), web_en::FilesPageHtml,
                                   sizeof(web_en::FilesPageHtml));
   sendCompressedContent(server.get(), "text/html", page.data, page.size);
 }
@@ -1508,7 +1565,7 @@ void CrossPointWebServer::handleDelete() const {
 }
 
 void CrossPointWebServer::handleSettingsPage() const {
-  const auto page = localizedPage(web_zh_cn::SettingsPageHtml, sizeof(web_zh_cn::SettingsPageHtml),
+  const auto page = localizedPageFor(server.get(), web_zh_cn::SettingsPageHtml, sizeof(web_zh_cn::SettingsPageHtml),
                                   web_en::SettingsPageHtml, sizeof(web_en::SettingsPageHtml));
   if (sendCompressedContent(server.get(), "text/html", page.data, page.size)) {
     LOG_DBG("WEB", "Served settings page");
@@ -1951,6 +2008,624 @@ void CrossPointWebServer::handleDeleteWifiNetwork() {
 
   LOG_DBG("WEB", "Deleted Wi-Fi network at index %d (SSID: %s)", idx, ssid->c_str());
   server->send(200, "text/plain", "OK");
+}
+
+// ---------------------------------------------------------------------------
+// Browser-driven Wi-Fi provisioning
+// ---------------------------------------------------------------------------
+
+void CrossPointWebServer::handleWifiPage() const {
+  const auto page = localizedPageFor(server.get(), web_zh_cn::WifiPageHtml, sizeof(web_zh_cn::WifiPageHtml), web_en::WifiPageHtml,
+                                  sizeof(web_en::WifiPageHtml));
+  sendCompressedContent(server.get(), "text/html", page.data, page.size);
+}
+
+void CrossPointWebServer::handleWifiScanStart() {
+  // Scanning needs the STA interface; in pure AP mode enable AP+STA. The AP and
+  // this web server keep running (same channel), so the phone stays connected.
+  if ((WiFi.getMode() & WIFI_MODE_STA) == 0) {
+    WiFi.mode(WIFI_AP_STA);
+    delay(20);
+  }
+  const int16_t scanState = WiFi.scanComplete();
+  if (scanState == WIFI_SCAN_RUNNING) {
+    server->send(202, "application/json", "{\"state\":\"scanning\"}");
+    return;
+  }
+  if (scanState >= 0) WiFi.scanDelete();  // discard stale results before a fresh scan
+  if (WiFi.scanNetworks(/*async=*/true, /*show_hidden=*/true) < 0) {
+    server->send(500, "application/json", "{\"state\":\"failed\"}");
+    return;
+  }
+  LOG_DBG("WEB", "Wi-Fi scan started (web request)");
+  server->send(202, "application/json", "{\"state\":\"scanning\"}");
+}
+
+void CrossPointWebServer::handleWifiScanResults() const {
+  const int16_t count = WiFi.scanComplete();
+  if (count == WIFI_SCAN_RUNNING) {
+    server->send(200, "application/json", "{\"state\":\"scanning\"}");
+    return;
+  }
+  if (count == WIFI_SCAN_FAILED) {
+    server->send(200, "application/json", "{\"state\":\"failed\"}");
+    return;
+  }
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("{\"state\":\"done\",\"networks\":[");
+
+  char output[160];
+  JsonDocument doc;
+  int emitted = 0;
+  for (int16_t i = 0; i < count; i++) {
+    const String ssid = WiFi.SSID(i);
+    if (ssid.isEmpty()) continue;  // hidden network with no broadcast SSID
+    doc.clear();
+    doc["ssid"] = ssid;
+    doc["rssi"] = WiFi.RSSI(i);
+    doc["secure"] = WiFi.encryptionType(i) != WIFI_AUTH_OPEN;
+    const size_t written = serializeJson(doc, output, sizeof(output));
+    if (written >= sizeof(output)) continue;
+    if (emitted > 0) server->sendContent(",");
+    server->sendContent(output);
+    emitted++;
+    yield();
+    resetTaskWatchdogIfSubscribed();
+  }
+  WiFi.scanDelete();
+  server->sendContent("]}");
+  server->sendContent("");
+  LOG_DBG("WEB", "Served Wi-Fi scan results (%d network(s))", emitted);
+}
+
+void CrossPointWebServer::handleWifiConnect() {
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+  JsonDocument doc;
+  const DeserializationError err = deserializeJson(doc, server->arg("plain"));
+  if (err) {
+    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
+    return;
+  }
+  const std::string ssid = doc["ssid"] | std::string("");
+  if (ssid.empty() || ssid.size() > 32) {
+    server->send(400, "text/plain", "SSID is required");
+    return;
+  }
+  const std::string password = doc["password"] | std::string("");
+
+  if ((WiFi.getMode() & WIFI_MODE_STA) == 0) {
+    WiFi.mode(WIFI_AP_STA);
+    delay(20);
+  }
+  // Join all channels / strongest BSSID, same policy as the on-device flow.
+  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
+  WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
+  WiFi.disconnect(false, false);  // STA interface only; the AP stays up
+  delay(50);
+  if (password.empty()) {
+    WiFi.begin(ssid.c_str());
+  } else {
+    WiFi.begin(ssid.c_str(), password.c_str());
+  }
+
+  provisionState = WifiProvisionState::Connecting;
+  provisionSsid = ssid;
+  provisionPassword = password;
+  provisionStartedAt = millis();
+  LOG_DBG("WEB", "Web provisioning: joining SSID '%s'", ssid.c_str());
+  server->send(202, "application/json", "{\"state\":\"connecting\"}");
+}
+
+void CrossPointWebServer::handleWifiState() {
+  constexpr unsigned long PROVISION_TIMEOUT_MS = 20000;
+  if (provisionState == WifiProvisionState::Connecting) {
+    if (WiFi.status() == WL_CONNECTED) {
+      provisionState = WifiProvisionState::Connected;
+      // Persist only on proven success, then drop the plaintext password.
+      WIFI_STORE.addCredential(provisionSsid, provisionPassword);
+      WIFI_STORE.setLastConnectedSsid(provisionSsid);
+      WIFI_STORE.saveToFile();
+      provisionPassword.clear();
+      provisionPassword.shrink_to_fit();
+      LOG_DBG("WEB", "Web provisioning: connected to '%s', IP %s", provisionSsid.c_str(),
+              WiFi.localIP().toString().c_str());
+    } else if (millis() - provisionStartedAt > PROVISION_TIMEOUT_MS) {
+      provisionState = WifiProvisionState::Failed;
+      provisionPassword.clear();
+      provisionPassword.shrink_to_fit();
+      LOG_DBG("WEB", "Web provisioning: join '%s' timed out", provisionSsid.c_str());
+    }
+  }
+
+  JsonDocument doc;
+  doc["apActive"] = (WiFi.getMode() & WIFI_MODE_AP) != 0;
+  doc["apIp"] = (WiFi.getMode() & WIFI_MODE_AP) != 0 ? WiFi.softAPIP().toString() : "";
+  const char* state = "idle";
+  switch (provisionState) {
+    case WifiProvisionState::Connecting: state = "connecting"; break;
+    case WifiProvisionState::Connected: state = "connected"; break;
+    case WifiProvisionState::Failed: state = "failed"; break;
+    case WifiProvisionState::Idle: break;
+  }
+  doc["provision"] = state;
+  doc["ssid"] = provisionSsid;
+  const bool staConnected = WiFi.status() == WL_CONNECTED;
+  doc["staConnected"] = staConnected;
+  doc["staIp"] = staConnected ? WiFi.localIP().toString() : "";
+  doc["rssi"] = staConnected ? WiFi.RSSI() : 0;
+  sendJson(doc);
+}
+
+// ---------------------------------------------------------------------------
+// Reading statistics
+// ---------------------------------------------------------------------------
+
+void CrossPointWebServer::handleStatsPage() const {
+  const auto page = localizedPageFor(server.get(), web_zh_cn::StatsPageHtml, sizeof(web_zh_cn::StatsPageHtml), web_en::StatsPageHtml,
+                                  sizeof(web_en::StatsPageHtml));
+  sendCompressedContent(server.get(), "text/html", page.data, page.size);
+}
+
+void CrossPointWebServer::handleStatsData() const {
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+
+  char output[384];
+  JsonDocument doc;
+  doc["totalReadingMs"] = READING_STATS.getTotalReadingMs();
+  doc["todayReadingMs"] = READING_STATS.getTodayReadingMs();
+  doc["dailyGoalMs"] = getDailyReadingGoalMs();
+  doc["currentStreakDays"] = READING_STATS.getCurrentStreakDays();
+  doc["maxStreakDays"] = READING_STATS.getMaxStreakDays();
+  doc["booksStarted"] = READING_STATS.getBooksStartedCount();
+  doc["booksFinished"] = READING_STATS.getBooksFinishedCount();
+  serializeJson(doc, output, sizeof(output));
+  server->sendContent("{\"summary\":");
+  server->sendContent(output);
+  server->sendContent(",\"books\":[");
+
+  const auto& books = READING_STATS.getBooks();
+  for (size_t i = 0; i < books.size(); i++) {
+    const auto& book = books[i];
+    doc.clear();
+    doc["title"] = book.title.empty() ? book.path : book.title;
+    doc["author"] = book.author;
+    doc["path"] = book.path;
+    doc["progressPercent"] = book.lastProgressPercent;
+    doc["totalReadingMs"] = book.totalReadingMs;
+    doc["sessions"] = book.sessions;
+    doc["readingDays"] = static_cast<uint32_t>(book.readingDays.size());
+    doc["completed"] = book.completed;
+    doc["lastReadAt"] = book.lastReadAt;
+    const size_t written = serializeJson(doc, output, sizeof(output));
+    if (written >= sizeof(output)) continue;
+    if (i > 0) server->sendContent(",");
+    server->sendContent(output);
+    yield();
+    resetTaskWatchdogIfSubscribed();
+  }
+  server->sendContent("]}");
+  server->sendContent("");
+  LOG_DBG("WEB", "Served reading stats API (%zu book(s))", books.size());
+}
+
+// ---------------------------------------------------------------------------
+// WeChat Reading (weread) web entry
+// ---------------------------------------------------------------------------
+
+void CrossPointWebServer::handleWereadPage() const {
+  const auto page = localizedPageFor(server.get(), web_zh_cn::WereadPageHtml, sizeof(web_zh_cn::WereadPageHtml),
+                                  web_en::WereadPageHtml, sizeof(web_en::WereadPageHtml));
+  sendCompressedContent(server.get(), "text/html", page.data, page.size);
+}
+
+void CrossPointWebServer::handleWereadStatus() const {
+  // The login session lives on the SD card; its presence means the device-side
+  // app has an authenticated session (login itself is a device workflow today).
+  const bool loggedIn = Storage.exists("/.crosspoint/weread/session.bin");
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("{\"loggedIn\":");
+  server->sendContent(loggedIn ? "true" : "false");
+  server->sendContent(",\"cachedBooks\":[");
+
+  // Cached books are the finished EPUBs in /WeRead, readable fully offline.
+  int emitted = 0;
+  char output[320];
+  JsonDocument doc;
+  scanFiles("/WeRead", [&](const FileInfo& info) {
+    if (info.isDirectory || !FsHelpers::checkFileExtension(info.name, ".epub")) return true;
+    doc.clear();
+    doc["name"] = info.name;
+    doc["size"] = info.size;
+    const size_t written = serializeJson(doc, output, sizeof(output));
+    if (written < sizeof(output)) {
+      if (emitted > 0) server->sendContent(",");
+      server->sendContent(output);
+      emitted++;
+    }
+    return true;
+  });
+  server->sendContent("]}");
+  server->sendContent("");
+  LOG_DBG("WEB", "Served weread status (loggedIn=%d, %d cached book(s))", loggedIn, emitted);
+}
+
+// ---------------------------------------------------------------------------
+// WeChat Reading browser flows
+// ---------------------------------------------------------------------------
+
+const char* CrossPointWebServer::wereadErrorName(const WeReadClient::Error error) {
+  switch (error) {
+    case WeReadClient::Error::Ok: return "ok";
+    case WeReadClient::Error::Cancelled: return "cancelled";
+    case WeReadClient::Error::Network: return "network";
+    case WeReadClient::Error::SessionExpired: return "sessionExpired";
+    case WeReadClient::Error::LoginFailed: return "loginFailed";
+    case WeReadClient::Error::Protocol: return "protocol";
+    case WeReadClient::Error::SdCard: return "sdCard";
+    case WeReadClient::Error::Integrity: return "integrity";
+    case WeReadClient::Error::Unavailable: return "unavailable";
+    case WeReadClient::Error::Clock: return "clock";
+    case WeReadClient::Error::OutOfMemory: return "outOfMemory";
+    case WeReadClient::Error::WholeBookOnly: return "wholeBookOnly";
+  }
+  return "unknown";
+}
+
+const char* CrossPointWebServer::wereadStageName(const WeReadClient::Operation::ProgressStage stage) {
+  switch (stage) {
+    case WeReadClient::Operation::ProgressStage::Chapters: return "chapters";
+    case WeReadClient::Operation::ProgressStage::Preparing: return "preparing";
+    case WeReadClient::Operation::ProgressStage::Images: return "images";
+    case WeReadClient::Operation::ProgressStage::Packaging: return "packaging";
+  }
+  return "chapters";
+}
+
+void CrossPointWebServer::resetWereadOp() {
+  wereadOp.reset();
+  wereadPurpose = WereadPurpose::None;
+}
+
+WeReadClient::Operation::Event CrossPointWebServer::pumpWeread(const unsigned long budgetMs) {
+  using Event = WeReadClient::Operation::Event;
+  Event last = Event::None;
+  const unsigned long started = millis();
+  while (wereadOp && wereadOp->active()) {
+    // A step blocks at most for one HTTP request; keep the watchdog fed and
+    // the Back button responsive between steps.
+    const Event event = wereadOp->step();
+    if (event != Event::None) last = event;
+    resetTaskWatchdogIfSubscribed();
+    yield();
+    if (uploadCancelCheck && uploadCancelCheck()) wereadOp->cancel();
+    if (millis() - started >= budgetMs) break;
+  }
+  return last;
+}
+
+bool CrossPointWebServer::sendQrMatrixJson(const char* text) const {
+  // Pick the smallest version that actually fits the payload: the ricmoo
+  // qrcode library does not validate overflow and silently emits a broken
+  // (unscannable) matrix when the data exceeds the version capacity.
+  const size_t len = strlen(text);
+  const int version = QrUtils::versionForPayloadSize(len);
+  if (version == 0) return false;
+
+  const uint32_t bufferSize = qrcode_getBufferSize(version);
+  auto qrcodeBytes = makeUniqueNoThrow<uint8_t[]>(bufferSize);
+  if (!qrcodeBytes) return false;
+  QRCode qrcode;
+  if (qrcode_initText(&qrcode, qrcodeBytes.get(), version, ECC_LOW, text) != 0) return false;
+
+  server->sendContent("\"qr\":{\"size\":");
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(qrcode.size));
+  server->sendContent(buf);
+  server->sendContent(",\"rows\":[");
+  // One row per chunk; the buffer fits the largest matrix (version 40 = 177
+  // modules + quotes). A too-small buffer here silently truncates rows and
+  // produces an unscannable QR.
+  char row[200];
+  for (uint8_t y = 0; y < qrcode.size; y++) {
+    size_t pos = 0;
+    row[pos++] = '"';
+    for (uint8_t x = 0; x < qrcode.size && pos < sizeof(row) - 2; x++) {
+      row[pos++] = qrcode_getModule(&qrcode, x, y) ? '1' : '0';
+    }
+    row[pos++] = '"';
+    row[pos] = '\0';
+    if (y > 0) server->sendContent(",");
+    server->sendContent(row);
+  }
+  server->sendContent("]}");
+  return true;
+}
+
+void CrossPointWebServer::handleWereadDisclaimer() {
+  if (!WeReadStore::acceptDisclaimer()) {
+    server->send(500, "application/json", "{\"ok\":false}");
+    return;
+  }
+  server->send(200, "application/json", "{\"ok\":true}");
+}
+
+void CrossPointWebServer::handleWereadLoginStart() {
+  if (wereadOp && wereadOp->active()) {
+    if (wereadPurpose == WereadPurpose::Login) {
+      // A refreshed page restarts the flow: retire the stale QR attempt
+      // instead of leaving the caller stuck on "busy" until it times out.
+      wereadOp->cancel();
+      pumpWeread(2000);
+    } else {
+      server->send(409, "application/json", "{\"state\":\"busy\"}");
+      return;
+    }
+  }
+  resetWereadOp();
+  if (!WeReadStore::hasAcceptedDisclaimer()) {
+    server->send(200, "application/json", "{\"state\":\"disclaimerRequired\"}");
+    return;
+  }
+
+  wereadOp = makeUniqueNoThrow<WeReadClient::Operation>();
+  if (!wereadOp) {
+    LOG_ERR("WEB", "OOM: WeRead Operation (%u bytes)", static_cast<unsigned>(sizeof(WeReadClient::Operation)));
+    server->send(500, "application/json", "{\"state\":\"failed\",\"error\":\"outOfMemory\"}");
+    return;
+  }
+  if (!wereadOp->begin(WeReadClient::Operation::Kind::Sync)) {
+    resetWereadOp();
+    server->send(500, "application/json", "{\"state\":\"failed\",\"error\":\"begin\"}");
+    return;
+  }
+  wereadPurpose = WereadPurpose::Login;
+
+  using Event = WeReadClient::Operation::Event;
+  const Event event = pumpWeread(6000);
+  respondWereadLogin(event);
+}
+
+void CrossPointWebServer::handleWereadLoginPoll() {
+  if (!wereadOp || wereadPurpose != WereadPurpose::Login) {
+    server->send(200, "application/json", "{\"state\":\"idle\"}");
+    return;
+  }
+  const auto event = pumpWeread(4000);
+  respondWereadLogin(event);
+}
+
+void CrossPointWebServer::respondWereadLogin(const WeReadClient::Operation::Event lastEvent) {
+  using Event = WeReadClient::Operation::Event;
+
+  if (!wereadOp || !wereadOp->active()) {
+    const WeReadClient::Error error = wereadOp ? wereadOp->error() : WeReadClient::Error::Ok;
+    if (error == WeReadClient::Error::Ok) {
+      // Sync completed: existing session was valid, shelf is now current.
+      server->send(200, "application/json", "{\"state\":\"done\"}");
+    } else {
+      char buf[96];
+      snprintf(buf, sizeof(buf), "{\"state\":\"failed\",\"error\":\"%s\"}", wereadErrorName(error));
+      server->send(200, "application/json", buf);
+    }
+    resetWereadOp();
+    return;
+  }
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  if (lastEvent == Event::QrReady && wereadOp->qrUrl()[0] != '\0') {
+    server->sendContent("{\"state\":\"qr\",\"qrUrl\":\"");
+    server->sendContent(wereadOp->qrUrl());
+    server->sendContent("\",");
+    if (!sendQrMatrixJson(wereadOp->qrUrl())) server->sendContent("\"qr\":null");
+    server->sendContent("}");
+  } else if (lastEvent == Event::Authenticated) {
+    // Login confirmed; the shelf sync is still running inside the operation.
+    server->sendContent("{\"state\":\"authenticated\"}");
+  } else {
+    server->sendContent("{\"state\":\"waiting\"}");
+  }
+  server->sendContent("");
+}
+
+void CrossPointWebServer::handleWereadCancel() {
+  if (wereadOp && wereadOp->active()) {
+    wereadOp->cancel();
+    pumpWeread(3000);
+  }
+  resetWereadOp();
+  server->send(200, "application/json", "{\"ok\":true}");
+}
+
+void CrossPointWebServer::handleWereadBookshelf() const {
+  HalFile file;
+  uint32_t count = 0;
+  const bool ready = WeReadStore::openShelf(file, count);
+
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  server->sendContent("{\"shelfReady\":");
+  server->sendContent(ready ? "true" : "false");
+  server->sendContent(",\"books\":[");
+
+  if (ready) {
+    char output[960];
+    JsonDocument doc;
+    WeReadStore::ShelfRecord record;
+    for (uint32_t i = 0; i < count; i++) {
+      if (!WeReadStore::readShelfRecord(file, i, record)) continue;
+      doc.clear();
+      doc["index"] = i;
+      doc["bookId"] = record.bookId;
+      doc["title"] = record.title;
+      doc["author"] = record.author;
+      doc["coverUrl"] = record.coverUrl;
+      doc["readUpdateTime"] = record.readUpdateTime;
+      const size_t written = serializeJson(doc, output, sizeof(output));
+      if (written >= sizeof(output)) continue;
+      if (i > 0) server->sendContent(",");
+      server->sendContent(output);
+      yield();
+      resetTaskWatchdogIfSubscribed();
+    }
+    // Local HalFile destructors close their handles (DESTRUCTOR_CLOSES_FILE=1).
+  }
+  server->sendContent("]}");
+  server->sendContent("");
+  LOG_DBG("WEB", "Served weread bookshelf (%u book(s))", static_cast<unsigned>(ready ? count : 0));
+}
+
+void CrossPointWebServer::handleWereadRefresh() {
+  if (wereadOp && wereadOp->active()) {
+    server->send(409, "application/json", "{\"state\":\"busy\"}");
+    return;
+  }
+  resetWereadOp();
+  WeReadStore::Session session;
+  if (!WeReadStore::loadSession(session) || !session.valid()) {
+    server->send(200, "application/json", "{\"state\":\"loginRequired\"}");
+    return;
+  }
+
+  wereadOp = makeUniqueNoThrow<WeReadClient::Operation>();
+  if (!wereadOp || !wereadOp->begin(WeReadClient::Operation::Kind::Sync)) {
+    resetWereadOp();
+    server->send(500, "application/json", "{\"state\":\"failed\",\"error\":\"begin\"}");
+    return;
+  }
+  wereadPurpose = WereadPurpose::Refresh;
+
+  // Long response: pump to completion, sending keep-alive whitespace so the
+  // browser connection stays open, then one JSON result line.
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+  unsigned long lastKeepAlive = millis();
+  while (wereadOp->active()) {
+    wereadOp->step();
+    resetTaskWatchdogIfSubscribed();
+    yield();
+    if (uploadCancelCheck && uploadCancelCheck()) wereadOp->cancel();
+    if (millis() - lastKeepAlive >= 2000) {
+      server->sendContent(" ");
+      lastKeepAlive = millis();
+    }
+  }
+  const WeReadClient::Error error = wereadOp->error();
+  char buf[96];
+  if (error == WeReadClient::Error::Ok) {
+    server->sendContent("{\"state\":\"done\"}");
+  } else {
+    snprintf(buf, sizeof(buf), "{\"state\":\"failed\",\"error\":\"%s\"}", wereadErrorName(error));
+    server->sendContent(buf);
+  }
+  server->sendContent("");
+  resetWereadOp();
+}
+
+void CrossPointWebServer::handleWereadCache() {
+  if (wereadOp && wereadOp->active()) {
+    server->send(409, "application/json", "{\"state\":\"busy\"}");
+    return;
+  }
+  resetWereadOp();
+  if (!server->hasArg("plain")) {
+    server->send(400, "text/plain", "Missing JSON body");
+    return;
+  }
+  JsonDocument body;
+  if (deserializeJson(body, server->arg("plain"))) {
+    server->send(400, "text/plain", "Invalid JSON");
+    return;
+  }
+  const std::string bookId = body["bookId"] | std::string("");
+  const bool includeImages = body["images"] | true;
+  if (bookId.empty()) {
+    server->send(400, "application/json", "{\"state\":\"failed\",\"error\":\"bookId\"}");
+    return;
+  }
+  WeReadStore::Session session;
+  if (!WeReadStore::loadSession(session) || !session.valid()) {
+    server->send(200, "application/json", "{\"state\":\"loginRequired\"}");
+    return;
+  }
+
+  // The download begins from the shelf record (title/author/cover URL).
+  HalFile shelfFile;
+  uint32_t shelfCount = 0;
+  WeReadStore::ShelfRecord record;
+  bool found = false;
+  if (WeReadStore::openShelf(shelfFile, shelfCount)) {
+    for (uint32_t i = 0; i < shelfCount; i++) {
+      if (WeReadStore::readShelfRecord(shelfFile, i, record) && bookId == record.bookId) {
+        found = true;
+        break;
+      }
+    }
+    // Local HalFile destructor closes the handle (DESTRUCTOR_CLOSES_FILE=1).
+  }
+  if (!found) {
+    server->send(404, "application/json", "{\"state\":\"failed\",\"error\":\"unknownBook\"}");
+    return;
+  }
+
+  wereadOp = makeUniqueNoThrow<WeReadClient::Operation>();
+  if (!wereadOp) {
+    server->send(500, "application/json", "{\"state\":\"failed\",\"error\":\"outOfMemory\"}");
+    return;
+  }
+  WeReadClient::DownloadOptions options;
+  options.imagePolicy = includeImages ? WeReadStore::ImagePolicy::Embed : WeReadStore::ImagePolicy::Exclude;
+  options.chapterScope = WeReadClient::DownloadOptions::ChapterScope::WholeBook;
+  if (!wereadOp->begin(WeReadClient::Operation::Kind::Download, &record, options)) {
+    resetWereadOp();
+    server->send(500, "application/json", "{\"state\":\"failed\",\"error\":\"begin\"}");
+    return;
+  }
+  // The download is pumped from handleClient() in the background; the browser
+  // polls /api/weread/cache/status for progress. Holding this HTTP connection
+  // open for the whole download would starve the single-threaded server (page
+  // refresh fails) and block the activity loop (buttons freeze).
+  wereadPurpose = WereadPurpose::Cache;
+  server->send(200, "application/json", "{\"state\":\"started\"}");
+}
+
+void CrossPointWebServer::handleWereadCacheStatus() {
+  if (!wereadOp || wereadPurpose != WereadPurpose::Cache) {
+    server->send(200, "application/json", "{\"state\":\"idle\"}");
+    return;
+  }
+  JsonDocument doc;
+  if (wereadOp->active()) {
+    doc["state"] = "progress";
+    doc["stage"] = wereadStageName(wereadOp->progressStage());
+    doc["completed"] = wereadOp->progressCompleted();
+    doc["total"] = wereadOp->progressTotal();
+    doc["title"] = wereadOp->progressTitle();
+  } else if (wereadOp->error() == WeReadClient::Error::Ok) {
+    doc["state"] = "done";
+    doc["path"] = wereadOp->finalPath();
+  } else {
+    doc["state"] = "failed";
+    doc["error"] = wereadErrorName(wereadOp->error());
+  }
+  sendJson(doc);
+}
+
+void CrossPointWebServer::handleWereadCacheCancel() {
+  if (wereadOp && wereadPurpose == WereadPurpose::Cache && wereadOp->active()) {
+    wereadOp->cancel();
+    server->send(200, "application/json", "{\"state\":\"cancelling\"}");
+    return;
+  }
+  server->send(200, "application/json", "{\"state\":\"idle\"}");
 }
 
 // ---------------------------------------------------------------------------
@@ -2936,7 +3611,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
 // --- Font management handlers ---
 
 void CrossPointWebServer::handleFontsPage() const {
-  const auto page = localizedPage(web_zh_cn::FontsPageHtml, sizeof(web_zh_cn::FontsPageHtml), web_en::FontsPageHtml,
+  const auto page = localizedPageFor(server.get(), web_zh_cn::FontsPageHtml, sizeof(web_zh_cn::FontsPageHtml), web_en::FontsPageHtml,
                                   sizeof(web_en::FontsPageHtml));
   if (sendCompressedContent(server.get(), "text/html", page.data, page.size)) {
     LOG_DBG("WEB", "Served fonts page");

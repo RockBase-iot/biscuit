@@ -17,6 +17,9 @@ the IP address shown on the device screen.
 |--------|------|---------|
 | `GET` | `/` | Home/status page |
 | `GET` | `/files` | File manager page |
+| `GET` | `/wifi` | Browser Wi-Fi provisioning page (scan / join) |
+| `GET` | `/stats` | Reading statistics page |
+| `GET` | `/weread` | WeChat Reading status page |
 | `GET` | `/settings` | Web settings page |
 | `GET` | `/fonts` | SD-card font manager page |
 | `GET` | `/js/jszip.min.js` | JavaScript asset used by the file manager |
@@ -24,6 +27,9 @@ the IP address shown on the device screen.
 The routes are identical in every firmware. Both page locales are embedded;
 Simplified-Chinese device UI selects `zh-CN`, and every other UI language uses
 the English pages. Page locale follows the UI language directly.
+
+CrossMux branding: the provisioning hotspot is `EPD-crossmux` (WPA2 password
+`12345678`), and mDNS advertises `crossmux.local` in both AP and STA modes.
 
 ## Device Status
 
@@ -451,6 +457,163 @@ curl -X POST \
   http://crosspoint.local/api/wifi/delete
 ```
 
+## Browser Wi-Fi Provisioning API
+
+Lets the phone/computer keyboard replace the on-device one. In pure AP mode the
+STA interface is enabled alongside the hotspot (AP+STA), so the web session
+survives the join. Credentials are saved only after a join succeeds.
+
+### `POST /api/wifi/scan`
+
+Starts an asynchronous scan (discarding any stale results). Returns
+`202 {"state":"scanning"}`; `500 {"state":"failed"}` if the radio rejects it.
+
+### `GET /api/wifi/scan`
+
+Polls scan progress. `{"state":"scanning"}` while running,
+`{"state":"failed"}` on radio failure, or:
+
+```json
+{"state":"done","networks":[{"ssid":"HomeWiFi","rssi":-45,"secure":true}]}
+```
+
+Hidden networks (empty SSID) are omitted. Results are freed once served.
+
+### `POST /api/wifi/connect`
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"ssid":"HomeWiFi","password":"secret"}' \
+  http://crossmux.local/api/wifi/connect
+```
+
+Returns `202 {"state":"connecting"}`. An empty password joins an open network.
+
+### `GET /api/wifi/state`
+
+```json
+{
+  "apActive": true,
+  "apIp": "192.168.4.1",
+  "provision": "connected",
+  "ssid": "HomeWiFi",
+  "staConnected": true,
+  "staIp": "192.168.1.100",
+  "rssi": -48
+}
+```
+
+`provision` is `idle`, `connecting`, `connected`, or `failed` (20 s join
+timeout). On `connected` the network is persisted to the credential store.
+
+## Reading Statistics API
+
+### `GET /api/stats`
+
+```json
+{
+  "summary": {
+    "totalReadingMs": 3600000, "todayReadingMs": 600000, "dailyGoalMs": 1800000,
+    "currentStreakDays": 4, "maxStreakDays": 9, "booksStarted": 3, "booksFinished": 1
+  },
+  "books": [
+    {"title":"Book","author":"Author","path":"/Books/book.epub","progressPercent":42,
+     "totalReadingMs":1800000,"sessions":5,"readingDays":3,"completed":false,"lastReadAt":1760000000}
+  ]
+}
+```
+
+## WeChat Reading Status API
+
+### `GET /api/weread/status`
+
+```json
+{"loggedIn":true,"cachedBooks":[{"name":"Book-abc123.epub","size":1234567}]}
+```
+
+`loggedIn` reflects the on-device session file; `cachedBooks` lists the
+offline EPUBs in `/WeRead`.
+
+## WeChat Reading Browser Flows
+
+The full login → bookshelf → cache pipeline is drivable from the browser. The
+firmware pumps the same `WeReadClient::Operation` state machine the on-device
+app uses; one operation at a time (`409 {"state":"busy"}` otherwise). All flows
+require internet on the device (join Wi-Fi first — AP+STA keeps the hotspot
+alive). The first login must pass the disclaimer gate.
+
+### `POST /api/weread/disclaimer`
+
+Records disclaimer acceptance. `200 {"ok":true}`.
+
+### `POST /api/weread/login/start`
+
+Starts login. Responses: `{"state":"disclaimerRequired"}`,
+`{"state":"qr","qrUrl":"...","qr":{"size":N,"rows":["0101..."]}}` (render the
+matrix rows as dark/light modules), `{"state":"done"}` (a saved session was
+still valid and the shelf synced inline), or
+`{"state":"failed","error":"<name>"}`.
+
+### `GET /api/weread/login/poll`
+
+While the QR is up: `{"state":"waiting"}` → `{"state":"authenticated"}` (shelf
+sync running) → `{"state":"done"}` or `{"state":"failed","error":"loginFailed"}`
+when the QR expires (~2 minutes). `{"state":"idle"}` when no login is active.
+
+### `POST /api/weread/cancel`
+
+Cancels the active login/refresh operation. `200 {"ok":true}`.
+
+### `GET /api/weread/bookshelf`
+
+Reads the synced shelf from the SD card (no network):
+
+```json
+{"shelfReady":true,"books":[{"index":0,"bookId":"abc","title":"...","author":"...","coverUrl":"https://...","readUpdateTime":1760000000}]}
+```
+
+### `POST /api/weread/refresh`
+
+Re-syncs the shelf from the server. Long response with whitespace keep-alives;
+the final payload is `{"state":"done"}`, `{"state":"loginRequired"}`, or
+`{"state":"failed","error":"<name>"}`.
+
+### `POST /api/weread/cache`
+
+Caches one book as an offline EPUB at `/WeRead/<title>-<bookId>.epub` (the
+same format and location the on-device app produces, readable fully offline).
+
+```bash
+curl -X POST -H "Content-Type: application/json" \
+  -d '{"bookId":"abc","images":true}' \
+  http://crossmux.local/api/weread/cache
+```
+
+`images:false` skips chapter images. The download runs as a background job
+(pumped between web requests, so the page stays responsive and the device
+buttons keep working); the immediate response is `{"state":"started"}`.
+Rejections: `{"state":"busy"}` (409), `{"state":"loginRequired"}`,
+`{"state":"failed","error":"unknownBook"}` (404).
+
+### `GET /api/weread/cache/status`
+
+Polls the background cache job:
+
+```text
+{"state":"idle"}
+{"state":"progress","stage":"chapters","completed":12,"total":200,"title":"..."}
+{"state":"done","path":"/WeRead/Book-abc.epub"}
+{"state":"failed","error":"<name>"}
+```
+
+`stage` is `chapters`, `preparing`, `images`, or `packaging`. `sessionExpired`
+means the browser must log in again.
+
+### `POST /api/weread/cache/cancel`
+
+Cancels the running cache job (`{"state":"cancelling"}` or
+`{"state":"idle"}`). The device Back button cancels it too.
+
 ## WebSocket Upload
 
 ### Port 81
@@ -530,14 +693,17 @@ The final field is the WebSocket upload port.
 ### Station Mode (STA)
 
 - Device joins an existing 2.4 GHz Wi-Fi network.
-- `crosspoint.local` is advertised with mDNS when available.
+- `crossmux.local` is advertised with mDNS when available (legacy docs/examples
+  may still say `crosspoint.local`); the router-side hostname is `crossmux-<MAC>`.
 - `/api/status` returns `"mode": "STA"` and RSSI in dBm.
 
 ### Access Point Mode (AP)
 
-- Device creates an open hotspot named `CrossPoint-Reader`.
-- The device shows a Wi-Fi QR code and URL QR code.
-- The fallback IP is typically `192.168.4.1`.
+- Device creates a WPA2 hotspot named `EPD-crossmux` (password `12345678`).
+- The device shows Wi-Fi and URL QR codes plus the password on screen.
+- `crossmux.local` is advertised with mDNS; the fallback IP is typically `192.168.4.1`.
+- A captive-portal DNS redirects browsers to the setup pages; `/wifi` can scan
+  and join the home network without leaving AP mode (AP+STA).
 - `/api/status` returns `"mode": "AP"` and `"rssi": 0`.
 
 ### Calibre Wireless

@@ -11,6 +11,8 @@
 #include <string>
 #include <vector>
 
+#include "WeReadWebApi.h"
+
 // Structure to hold file information
 struct FileInfo {
   String name;
@@ -149,6 +151,61 @@ class CrossPointWebServer {
   void handleGetWifiNetworks() const;
   void handlePostWifiNetwork();
   void handleDeleteWifiNetwork();
+
+  // Browser-driven Wi-Fi provisioning: the phone's keyboard replaces the
+  // on-device one (critical on two-button boards like NM-EPD-420). In pure AP
+  // mode the STA interface is enabled alongside (AP+STA) so the hotspot and its
+  // web server keep running while the device joins the home network.
+  enum class WifiProvisionState : uint8_t { Idle, Connecting, Connected, Failed };
+  WifiProvisionState provisionState = WifiProvisionState::Idle;
+  std::string provisionSsid;
+  std::string provisionPassword;  // held only until the outcome is known, then cleared
+  unsigned long provisionStartedAt = 0;
+  void handleWifiPage() const;
+  void handleWifiScanStart();
+  void handleWifiScanResults() const;
+  void handleWifiConnect();
+  void handleWifiState();
+
+  // Reading statistics (READING_STATS stays resident during web sessions; only
+  // the OTA/font-download paths release it).
+  void handleStatsPage() const;
+  void handleStatsData() const;
+
+  // WeChat Reading (weread) web entry: session/cache status + cached EPUB list.
+  void handleWereadPage() const;
+  void handleWereadStatus() const;
+
+  // WeChat Reading browser flows. The on-device Operation state machine is
+  // cooperative (step() blocks only for a single HTTP request), so the web
+  // server pumps it directly: login and shelf refresh are polled via JSON,
+  // and book caching runs as a background job pumped from handleClient() so
+  // the activity loop (buttons) and other web requests stay responsive; the
+  // browser polls /api/weread/cache/status. One operation at a time; a second
+  // request gets 409.
+  void handleWereadDisclaimer();
+  void handleWereadLoginStart();
+  void handleWereadLoginPoll();
+  void handleWereadCancel();
+  void handleWereadBookshelf() const;
+  void handleWereadRefresh();
+  void handleWereadCache();
+  void handleWereadCacheStatus();
+  void handleWereadCacheCancel();
+
+  enum class WereadPurpose : uint8_t { None, Login, Refresh, Cache };
+  std::unique_ptr<WeReadClient::Operation> wereadOp;
+  WereadPurpose wereadPurpose = WereadPurpose::None;
+  // Pumps the operation for at most budgetMs, resetting the watchdog and
+  // honouring the Back-button cancel check between steps. Returns the last
+  // non-None event observed (or None).
+  WeReadClient::Operation::Event pumpWeread(unsigned long budgetMs);
+  void resetWereadOp();
+  void respondWereadLogin(WeReadClient::Operation::Event lastEvent);
+  static const char* wereadErrorName(WeReadClient::Error error);
+  static const char* wereadStageName(WeReadClient::Operation::ProgressStage stage);
+  // Streams the QR matrix for text as JSON {"size":N,"rows":["0101",...]}.
+  bool sendQrMatrixJson(const char* text) const;
 
   // Missing or malformed JSON sends a 400 response and returns false.
   bool readJsonBody(JsonDocument& out) const;

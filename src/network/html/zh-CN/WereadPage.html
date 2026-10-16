@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CrossMux - 微信读书</title>
+    <style>
+      :root {
+        --font-color: #333;
+        --bg: #f5f5f5;
+        --title-color: #2c3e50;
+        --card-bg: #FFF;
+        --label-color: #7f8c8d;
+        --border-color: #eee;
+        --accent-color: rgb(110, 154, 130);
+        --accent-hover-color: #5a8c73;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --font-color: #f5f5f5;
+          --bg: #333;
+          --title-color: #ecf0f1;
+          --card-bg: #444;
+          --label-color: #bdc3c7;
+          --border-color: #555;
+          color-scheme: dark;
+        }
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: var(--bg);
+        color: var(--font-color);
+      }
+      h1 {
+        color: var(--title-color);
+        border-bottom: 2px solid var(--accent-color);
+        padding-bottom: 10px;
+      }
+      h2 { color: var(--title-color); margin-top: 0; }
+      .card {
+        background: var(--card-bg);
+        border-radius: 8px;
+        padding: 20px;
+        margin: 15px 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .nav-links { margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; }
+      .nav-links a {
+        padding: 10px 20px;
+        color: var(--font-color);
+        text-decoration: none;
+        border-radius: 4px;
+      }
+      .nav-links a.active { background-color: var(--accent-color); color: white; }
+      .nav-links a:not(.active):hover { background-color: var(--accent-hover-color); color: white; }
+      button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        background-color: var(--accent-color);
+        color: white;
+        cursor: pointer;
+        font-size: 0.95em;
+      }
+      button:hover { background-color: var(--accent-hover-color); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      .status {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        color: white;
+        font-size: 0.9em;
+      }
+      .status.on { background-color: #27ae60; }
+      .status.off { background-color: #95a5a6; }
+      .hint { color: var(--label-color); line-height: 1.6; }
+      .err { color: #c0392b; }
+      #qr-canvas { display: block; margin: 12px auto; background: #fff; padding: 12px; border-radius: 8px; }
+      .book-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border-color);
+      }
+      .book-row:last-child { border-bottom: none; }
+      .book-row img { width: 42px; height: 60px; object-fit: cover; border-radius: 3px; background: var(--border-color); }
+      .book-info { flex: 1; min-width: 0; }
+      .book-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .book-author { color: var(--label-color); font-size: 0.85em; }
+      .progress-bar { background: var(--border-color); border-radius: 4px; height: 8px; margin-top: 6px; }
+      .progress-fill { background: var(--accent-color); border-radius: 4px; height: 8px; width: 0%; transition: width 0.4s; }
+      .row-status { font-size: 0.85em; color: var(--label-color); margin-top: 4px; }
+      .size { color: var(--label-color); }
+    </style>
+  </head>
+  <body>
+    <h1>📖 微信读书</h1>
+
+    <div class="nav-links">
+      <a href="/">首页</a>
+      <a href="/files">文件</a>
+      <a href="/wifi">WiFi</a>
+      <a href="/stats">阅读统计</a>
+      <a href="/weread" class="active">微信读书</a>
+      <a href="/settings">设置</a>
+      <a href="/fonts">字体</a>
+    </div>
+
+    <div class="card">
+      <h2>登录状态</h2>
+      <div id="status">加载中…</div>
+    </div>
+
+    <div class="card" id="login-card" style="display:none">
+      <h2>扫码登录</h2>
+      <div id="login-area">
+        <p class="hint">使用微信「扫一扫」扫描下方二维码并确认登录。二维码约 2 分钟内有效。</p>
+        <button id="qr-btn" onclick="startLogin()">获取登录二维码</button>
+        <canvas id="qr-canvas" style="display:none"></canvas>
+        <div id="login-status" class="hint"></div>
+      </div>
+    </div>
+
+    <div class="card" id="shelf-card" style="display:none">
+      <h2>书架</h2>
+      <div style="margin-bottom:10px">
+        <button id="refresh-btn" onclick="refreshShelf()">刷新书架</button>
+        <label style="margin-left:12px;font-size:0.9em;color:var(--label-color)">
+          <input type="checkbox" id="with-images" checked /> 缓存正文图片
+        </label>
+      </div>
+      <div id="shelf-list" class="hint">加载中…</div>
+    </div>
+
+    <div class="card">
+      <h2>已缓存书籍（离线可读，存于 SD 卡 /WeRead）</h2>
+      <div id="cached-list">加载中…</div>
+    </div>
+
+    <div class="card">
+      <p class="hint">
+        本功能为非官方客户端，仅供个人学习交流。登录凭证仅保存在本机 SD 卡
+        （/.crosspoint/weread/）。缓存生成的 EPUB 可在无网络环境下用内置阅读器打开。
+        缓存过程中可随时点「取消」或按设备返回键中止，刷新本页不影响后台缓存。
+      </p>
+    </div>
+
+    <script>
+      let pollTimer = null;
+
+      function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+          ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      }
+      function fmtSize(bytes) {
+        if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+        if (bytes >= 1024) return (bytes / 1024).toFixed(0) + ' KB';
+        return bytes + ' B';
+      }
+      const ERROR_NAMES = {
+        network: '网络错误（设备需已连接互联网，请先在 WiFi 页配网）',
+        sessionExpired: '登录已过期，请重新扫码',
+        loginFailed: '登录失败（二维码已过期或被取消），请重试',
+        sdCard: 'SD 卡写入失败，请检查剩余空间',
+        clock: '设备时钟校准失败，请重试',
+        outOfMemory: '设备内存不足，请重试',
+        cancelled: '已取消',
+        protocol: '协议错误（服务端可能已更新）',
+        integrity: '数据校验失败',
+        unavailable: '服务暂不可用'
+      };
+      function errText(e) { return ERROR_NAMES[e] || ('错误：' + e); }
+
+      async function loadStatus() {
+        const r = await fetch('/api/weread/status');
+        const data = await r.json();
+        document.getElementById('status').innerHTML = data.loggedIn
+          ? '<span class="status on">已登录</span>'
+          : '<span class="status off">未登录</span>';
+        document.getElementById('login-card').style.display = data.loggedIn ? 'none' : 'block';
+        document.getElementById('shelf-card').style.display = data.loggedIn ? 'block' : 'none';
+
+        const books = data.cachedBooks || [];
+        document.getElementById('cached-list').innerHTML = books.length
+          ? books.map(b => '<div class="book-row"><div class="book-info"><div class="book-title">' + esc(b.name) +
+                           '</div></div><span class="size">' + fmtSize(b.size) + '</span></div>').join('')
+          : '<span class="hint">暂无缓存书籍。</span>';
+        if (data.loggedIn) loadShelf();
+      }
+
+      async function startLogin() {
+        document.getElementById('qr-btn').disabled = true;
+        document.getElementById('login-status').textContent = '正在获取二维码…';
+        try {
+          const r = await fetch('/api/weread/login/start', { method: 'POST' });
+          const data = await r.json();
+          handleLoginState(data);
+        } catch (e) {
+          document.getElementById('login-status').innerHTML = '<span class="err">请求失败，请重试。</span>';
+          document.getElementById('qr-btn').disabled = false;
+        }
+      }
+
+      function handleLoginState(data) {
+        const status = document.getElementById('login-status');
+        if (data.state === 'disclaimerRequired') {
+          status.innerHTML = '首次使用需同意免责声明。';
+          showDisclaimer();
+        } else if (data.state === 'qr') {
+          drawQr(data.qr);
+          status.textContent = '请使用微信「扫一扫」扫码，并在手机上确认登录。';
+          pollTimer = setTimeout(pollLogin, 2000);
+        } else if (data.state === 'waiting' || data.state === 'starting') {
+          status.textContent = '等待扫码确认…';
+          pollTimer = setTimeout(pollLogin, 2000);
+        } else if (data.state === 'authenticated') {
+          status.textContent = '已确认，正在同步书架…';
+          pollTimer = setTimeout(pollLogin, 1500);
+        } else if (data.state === 'done') {
+          status.textContent = '登录成功，书架已同步。';
+          document.getElementById('qr-canvas').style.display = 'none';
+          document.getElementById('qr-btn').disabled = false;
+          loadStatus();
+        } else if (data.state === 'failed') {
+          status.innerHTML = '<span class="err">' + esc(errText(data.error)) + '</span>';
+          document.getElementById('qr-canvas').style.display = 'none';
+          document.getElementById('qr-btn').disabled = false;
+        } else if (data.state === 'idle') {
+          loadStatus();
+        } else if (data.state === 'busy') {
+          status.textContent = '设备正忙，请稍后重试。';
+          document.getElementById('qr-btn').disabled = false;
+        }
+      }
+
+      async function pollLogin() {
+        try {
+          const r = await fetch('/api/weread/login/poll');
+          handleLoginState(await r.json());
+        } catch (e) { pollTimer = setTimeout(pollLogin, 3000); }
+      }
+
+      function drawQr(qr) {
+        if (!qr) return;
+        const canvas = document.getElementById('qr-canvas');
+        const scale = 4;
+        const quiet = 4;  // modules of white margin; scanners need the quiet zone
+        canvas.width = (qr.size + quiet * 2) * scale;
+        canvas.height = (qr.size + quiet * 2) * scale;
+        canvas.style.display = 'block';
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#000';
+        for (let y = 0; y < qr.size; y++) {
+          const row = qr.rows[y];
+          if (row.length < qr.size) continue;  // skip truncated rows defensively
+          for (let x = 0; x < qr.size; x++) {
+            if (row[x] === '1') ctx.fillRect((x + quiet) * scale, (y + quiet) * scale, scale, scale);
+          }
+        }
+      }
+
+      function showDisclaimer() {
+        const area = document.getElementById('login-area');
+        area.innerHTML =
+          '<p class="hint">本功能为微信读书的非官方客户端，与腾讯/微信读书官方无关；' +
+          '仅供个人已购内容的本地阅读与学习交流，请遵守微信读书用户协议，勿用于传播。' +
+          '登录凭证与缓存仅保存在本机 SD 卡。</p>' +
+          '<button onclick="acceptDisclaimer()">同意并继续</button> ' +
+          '<button onclick="location.reload()" style="background:#95a5a6">取消</button>';
+      }
+
+      async function acceptDisclaimer() {
+        await fetch('/api/weread/disclaimer', { method: 'POST' });
+        location.reload();
+      }
+
+      async function loadShelf() {
+        const list = document.getElementById('shelf-list');
+        try {
+          const r = await fetch('/api/weread/bookshelf');
+          const data = await r.json();
+          if (!data.shelfReady) {
+            list.innerHTML = '<span class="hint">书架尚未同步，点击「刷新书架」。</span>';
+            return;
+          }
+          renderShelf(data.books || []);
+        } catch (e) {
+          list.innerHTML = '<span class="err">书架加载失败。</span>';
+        }
+      }
+
+      function renderShelf(books) {
+        const list = document.getElementById('shelf-list');
+        if (!books.length) {
+          list.innerHTML = '<span class="hint">书架为空。</span>';
+          return;
+        }
+        list.innerHTML = '';
+        for (const b of books) {
+          const row = document.createElement('div');
+          row.className = 'book-row';
+          row.innerHTML =
+            (b.coverUrl ? '<img src="' + esc(b.coverUrl) + '" referrerpolicy="no-referrer" onerror="this.style.visibility=\'hidden\'" />' : '') +
+            '<div class="book-info"><div class="book-title">' + esc(b.title) + '</div>' +
+            '<div class="book-author">' + esc(b.author) + '</div>' +
+            '<div class="progress-bar" style="display:none"><div class="progress-fill"></div></div>' +
+            '<div class="row-status"></div></div>' +
+            '<button>缓存</button>';
+          row.querySelector('button').onclick = () => cacheBook(b, row);
+          list.appendChild(row);
+        }
+      }
+
+      async function refreshShelf() {
+        const btn = document.getElementById('refresh-btn');
+        btn.disabled = true;
+        btn.textContent = '同步中…';
+        try {
+          const r = await fetch('/api/weread/refresh', { method: 'POST' });
+          const text = (await r.text()).trim();
+          const data = JSON.parse(text);
+          if (data.state === 'done') { await loadShelf(); }
+          else if (data.state === 'loginRequired') { await loadStatus(); }
+          else { alert(errText(data.error)); }
+        } catch (e) { alert('刷新失败，请重试。'); }
+        btn.disabled = false;
+        btn.textContent = '刷新书架';
+      }
+
+      async function cacheBook(book, row) {
+        const btn = row.querySelector('button');
+        const bar = row.querySelector('.progress-bar');
+        const fill = row.querySelector('.progress-fill');
+        const status = row.querySelector('.row-status');
+        btn.textContent = '取消';
+        bar.style.display = 'block';
+        const STAGES = { chapters: '章节', preparing: '整理资源', images: '图片', packaging: '生成图书' };
+        let polling = true;
+        btn.onclick = async () => {
+          polling = false;
+          btn.disabled = true;
+          try { await fetch('/api/weread/cache/cancel', { method: 'POST' }); } catch (e) {}
+        };
+        const restoreBtn = (label) => {
+          btn.disabled = false;
+          btn.textContent = label;
+          btn.onclick = () => cacheBook(book, row);
+        };
+        try {
+          const res = await fetch('/api/weread/cache', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ bookId: book.bookId, images: document.getElementById('with-images').checked })
+          });
+          const data = await res.json();
+          if (data.state === 'loginRequired') {
+            status.textContent = '登录已过期，请重新扫码。';
+            loadStatus();
+            restoreBtn('缓存');
+            return;
+          }
+          if (data.state !== 'started') {
+            status.innerHTML = '<span class="err">' + esc(errText(data.error || data.state)) + '</span>';
+            restoreBtn('缓存');
+            return;
+          }
+          while (polling) {
+            await new Promise(r => setTimeout(r, 1500));
+            if (!polling) break;
+            const sr = await fetch('/api/weread/cache/status');
+            const msg = await sr.json();
+            if (msg.state === 'progress') {
+              const pct = msg.total > 0 ? Math.round(msg.completed * 100 / msg.total) : 0;
+              fill.style.width = pct + '%';
+              status.textContent = (STAGES[msg.stage] || msg.stage) + ' ' + msg.completed + '/' + msg.total;
+            } else if (msg.state === 'done') {
+              fill.style.width = '100%';
+              status.textContent = '完成：' + msg.path;
+              btn.disabled = true;
+              btn.textContent = '已缓存';
+              btn.onclick = null;
+              loadStatus();
+              return;
+            } else if (msg.state === 'failed') {
+              status.innerHTML = '<span class="err">' + esc(errText(msg.error)) + '</span>';
+              restoreBtn('重试');
+              return;
+            } else {  // idle: cancelled or replaced
+              status.textContent = '缓存已取消。';
+              restoreBtn('缓存');
+              return;
+            }
+          }
+          status.textContent = '正在取消…';
+          restoreBtn('缓存');
+        } catch (e) {
+          status.innerHTML = '<span class="err">请求失败。</span>';
+          restoreBtn('重试');
+        }
+      }
+
+      loadStatus();
+    </script>
+    <div style="text-align:center;margin:16px 0"><a href="?lang=en" style="color:var(--label-color)">English</a></div>
+  </body>
+</html>

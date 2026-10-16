@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CrossMux - WiFi Setup</title>
+    <style>
+      :root {
+        --font-color: #333;
+        --bg: #f5f5f5;
+        --title-color: #2c3e50;
+        --card-bg: #FFF;
+        --label-color: #7f8c8d;
+        --border-color: #eee;
+        --accent-color: rgb(110, 154, 130);
+        --accent-hover-color: #5a8c73;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --font-color: #f5f5f5;
+          --bg: #333;
+          --title-color: #ecf0f1;
+          --card-bg: #444;
+          --label-color: #bdc3c7;
+          --border-color: #555;
+          color-scheme: dark;
+        }
+      }
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: var(--bg);
+        color: var(--font-color);
+      }
+      h1 {
+        color: var(--title-color);
+        border-bottom: 2px solid var(--accent-color);
+        padding-bottom: 10px;
+      }
+      h2 { color: var(--title-color); margin-top: 0; }
+      .card {
+        background: var(--card-bg);
+        border-radius: 8px;
+        padding: 20px;
+        margin: 15px 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .nav-links { margin: 20px 0; display: flex; gap: 10px; flex-wrap: wrap; }
+      .nav-links a {
+        padding: 10px 20px;
+        color: var(--font-color);
+        text-decoration: none;
+        border-radius: 4px;
+      }
+      .nav-links a.active { background-color: var(--accent-color); color: white; }
+      .nav-links a:not(.active):hover { background-color: var(--accent-hover-color); color: white; }
+      button {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 4px;
+        background-color: var(--accent-color);
+        color: white;
+        cursor: pointer;
+        font-size: 1em;
+      }
+      button:hover { background-color: var(--accent-hover-color); }
+      button:disabled { opacity: 0.5; cursor: default; }
+      input[type="password"], input[type="text"] {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 10px;
+        margin: 8px 0;
+        border: 1px solid var(--border-color);
+        border-radius: 4px;
+        font-size: 1em;
+        background: var(--card-bg);
+        color: var(--font-color);
+      }
+      .network-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        border-bottom: 1px solid var(--border-color);
+        cursor: pointer;
+        border-radius: 4px;
+      }
+      .network-row:hover { background: var(--accent-hover-color); color: white; }
+      .network-row.selected { background: var(--accent-color); color: white; }
+      .status-line { padding: 8px 0; color: var(--label-color); }
+      .ok { color: #27ae60; font-weight: 600; }
+      .err { color: #c0392b; font-weight: 600; }
+    </style>
+  </head>
+  <body>
+    <h1>📶 WiFi Setup</h1>
+
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/files">Files</a>
+      <a href="/wifi" class="active">WiFi</a>
+      <a href="/stats">Stats</a>
+      <a href="/weread">WeRead</a>
+      <a href="/settings">Settings</a>
+      <a href="/fonts">Fonts</a>
+    </div>
+
+    <div class="card">
+      <h2>Connection</h2>
+      <div class="status-line" id="conn-status">Loading…</div>
+    </div>
+
+    <div class="card">
+      <h2>Available Networks</h2>
+      <button id="scan-btn" onclick="startScan()">Scan</button>
+      <div id="network-list" style="margin-top: 10px"></div>
+    </div>
+
+    <div class="card" id="join-card" style="display: none">
+      <h2>Join Network</h2>
+      <div class="status-line">SSID: <strong id="join-ssid"></strong></div>
+      <input type="password" id="join-password" placeholder="Password (leave empty for open network)" />
+      <button id="join-btn" onclick="connect()">Connect</button>
+    </div>
+
+    <script>
+      let selectedSsid = '';
+      let pollTimer = null;
+
+      function fmtState(data) {
+        let html = 'Hotspot (AP): ' + (data.apActive ? 'on, ' + data.apIp : 'off') + '<br/>';
+        if (data.provision === 'connecting') {
+          html += 'Joining <strong>' + esc(data.ssid) + '</strong>…';
+        } else if (data.provision === 'connected' || data.staConnected) {
+          html += '<span class="ok">Connected to ' + esc(data.ssid) + '</span> — IP ' + data.staIp +
+                  ' (' + data.rssi + ' dBm). You can now reach the device at http://' + data.staIp + '/';
+        } else if (data.provision === 'failed') {
+          html += '<span class="err">Failed to join ' + esc(data.ssid) + '</span> — check the password and retry.';
+        } else {
+          html += 'Not connected to a home network yet.';
+        }
+        return html;
+      }
+
+      function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+          ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+      }
+
+      async function pollState() {
+        try {
+          const r = await fetch('/api/wifi/state');
+          const data = await r.json();
+          document.getElementById('conn-status').innerHTML = fmtState(data);
+        } catch (e) { /* device may be switching modes */ }
+      }
+
+      async function startScan() {
+        document.getElementById('scan-btn').disabled = true;
+        document.getElementById('network-list').innerHTML = '<div class="status-line">Scanning…</div>';
+        try { await fetch('/api/wifi/scan', { method: 'POST' }); } catch (e) {}
+        setTimeout(pollScan, 1500);
+      }
+
+      async function pollScan() {
+        try {
+          const r = await fetch('/api/wifi/scan');
+          const data = await r.json();
+          if (data.state === 'scanning') { setTimeout(pollScan, 1500); return; }
+          document.getElementById('scan-btn').disabled = false;
+          if (data.state !== 'done') {
+            document.getElementById('network-list').innerHTML = '<div class="status-line err">Scan failed, retry.</div>';
+            return;
+          }
+          data.networks.sort((a, b) => b.rssi - a.rssi);
+          const list = document.getElementById('network-list');
+          list.innerHTML = '';
+          if (!data.networks.length) {
+            list.innerHTML = '<div class="status-line">No networks found.</div>';
+            return;
+          }
+          for (const n of data.networks) {
+            const row = document.createElement('div');
+            row.className = 'network-row' + (n.ssid === selectedSsid ? ' selected' : '');
+            row.innerHTML = '<span>' + (n.secure ? '🔒 ' : '') + esc(n.ssid) + '</span><span>' + n.rssi + ' dBm</span>';
+            row.onclick = () => selectNetwork(n.ssid);
+            list.appendChild(row);
+          }
+        } catch (e) { setTimeout(pollScan, 2000); }
+      }
+
+      function selectNetwork(ssid) {
+        selectedSsid = ssid;
+        document.getElementById('join-ssid').textContent = ssid;
+        document.getElementById('join-card').style.display = 'block';
+        document.getElementById('join-password').focus();
+        const rows = document.querySelectorAll('.network-row');
+        rows.forEach(r => r.classList.toggle('selected', r.textContent.includes(ssid)));
+      }
+
+      async function connect() {
+        const password = document.getElementById('join-password').value;
+        document.getElementById('join-btn').disabled = true;
+        try {
+          await fetch('/api/wifi/connect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ssid: selectedSsid, password: password })
+          });
+        } catch (e) {}
+        document.getElementById('join-btn').disabled = false;
+        pollState();
+      }
+
+      pollState();
+      setInterval(pollState, 3000);
+    </script>
+    <div style="text-align:center;margin:16px 0"><a href="?lang=zh" style="color:var(--label-color)">中文</a></div>
+  </body>
+</html>

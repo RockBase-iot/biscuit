@@ -2294,8 +2294,12 @@ Error Operation::pollLogin() {
   char path[256];
   const int len = snprintf(path, sizeof(path), "/api/auth/getLoginInfo?uid=%s&otp=", loginUid_);
   if (len <= 0 || static_cast<size_t>(len) >= sizeof(path)) return Error::Protocol;
+  // requestOnce() writes the request URL into the buffer it is given; url_
+  // still holds the login QR payload (set by fetchLoginUid) until the login
+  // completes, so hand over a scratch buffer instead of clobbering it.
+  char requestUrl[160];
   const Error error = requestOnce("GET", path, nullptr, 0, &session_, kDefaultReferer, sink, responseStatus_, cookie_,
-                                  sizeof(cookie_), url_, sizeof(url_), ioBuffer_, sizeof(ioBuffer_));
+                                  sizeof(cookie_), requestUrl, sizeof(requestUrl), ioBuffer_, sizeof(ioBuffer_));
   if (error != Error::Ok) return error;
   if (responseStatus_ != 200 || !context.rootClosed) return Error::Network;
   if (!context.succeed) {
